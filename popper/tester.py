@@ -74,14 +74,14 @@ class Tester():
         self.cached_redundant_literals[k] = has_redundant_literal
         return has_redundant_literal
 
-    # def check_redundant_clause(self, program):
-    #     # AC: if the overhead of this call becomes too high, such as when learning programs with lots of clauses, we can improve it by not comparing already compared clauses
-    #     prog = []
-    #     for (head, body) in program:
-    #         C = f"[{','.join(('not_'+ Literal.to_code(head),) + tuple(Literal.to_code(lit) for lit in body))}]"
-    #         prog.append(C)
-    #     prog = f"[{','.join(prog)}]"
-    #     return list(self.prolog.query(f'redundant_clause({prog})'))
+    def check_redundant_clause(self, program):
+        # AC: if the overhead of this call becomes too high, such as when learning programs with lots of clauses, we can improve it by not comparing already compared clauses
+        prog = []
+        for (head, body) in program:
+            C = f"[{','.join(('not_'+ Literal.to_code(head),) + tuple(Literal.to_code(lit) for lit in body))}]"
+            prog.append(C)
+        prog = f"[{','.join(prog)}]"
+        return list(self.prolog.query(f'redundant_clause({prog})'))
 
     def is_non_functional(self, program):
         with self.using(program):
@@ -119,7 +119,7 @@ class Tester():
             r1 = dic['R1']
             yield rules[r0], rules[r1]
 
-    def test(self, rules):
+    def test_all(self, rules):
         covered = self.success_set(rules)
 
         tp, fn, tn, fp = 0, 0, 0, 0
@@ -137,17 +137,64 @@ class Tester():
 
         return tp, fn, tn, fp
 
-    def is_complete(self, rules):
-        return all(x in self.success_set(rules) for x in self.pos)
 
-    def is_consistent(self, rules):
+    def test_subset(self, rules, pos, neg):
+        covered = self.success_set(rules)
+
+        tp, fn, tn, fp = 0, 0, 0, 0
+
+        for p in pos:
+            if p in covered:
+                tp +=1
+            else:
+                fn +=1
+        for n in neg:
+            if n in covered:
+                fp +=1
+            else:
+                tn +=1
+
+        return tp, fn, tn, fp
+
+    def is_complete(self, rules, pos):
+        return all(x in self.success_set(rules) for x in pos)
+
+    def is_complete_all(self, rules):
+        return self.is_complete(rules, self.pos)
+
+    def is_consistent_all(self, rules):
         return all(x not in self.success_set(rules) for x in self.neg)
 
-    def is_incomplete(self, rules):
-        return any(x not in self.success_set(rules) for x in self.pos)
+    def is_incomplete(self, rules, pos):
+        return any(x not in self.success_set(rules) for x in pos)
 
-    def is_totally_incomplete(self, rules):
-        return all(x not in self.success_set(rules) for x in self.pos)
+    def is_incomplete_all(self, rules):
+        return self.is_incomplete(rules, self.pos)
+
+    def is_totally_incomplete(self, rules, pos):
+        return all(x not in self.success_set(rules) for x in pos)
+
+    def is_totally_incomplete_all(self, rules):
+        return self.is_totally_incomplete(rules, self.pos)
 
     def is_inconsistent(self, rules):
         return any(x in self.success_set(rules) for x in self.neg)
+
+    # TMP!!!!!
+    def reduce_ss(self, rules):
+        rules = list(rules)
+        rules_ss = self.success_set(rules)
+        for i in range(len(rules)):
+            subrules = [rules[j] for j in range(len(rules)) if i != j]
+            subrules_ss = self.success_set(subrules)
+            if rules_ss == subrules_ss:
+                return self.reduce_ss(subrules)
+        return frozenset(rules)
+
+    def reduce_subset(self, rules, pos):
+        rules = list(rules)
+        for i in range(len(rules)):
+            subrules = [rules[j] for j in range(len(rules)) if i != j]
+            if self.is_complete(subrules, pos):
+                return self.reduce(subrules, pos)
+        return frozenset(rules)
