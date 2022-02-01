@@ -235,7 +235,7 @@ class Stats:
     def show(self):
         message = f'Total programs: {self.total_programs}\n'
         total_op_time = 0
-        for summary in self.duration_summary():
+        for summary in sorted(self.duration_summary(), key=lambda x: x.total):
             message += f'{summary.operation}:\n\tCalled: {summary.called} times \t ' + \
                        f'Total: {summary.total:0.2f} \t Mean: {summary.mean:0.3f} \t ' + \
                        f'Max: {summary.maximum:0.3f}\n'
@@ -243,7 +243,7 @@ class Stats:
                 total_op_time += summary.total
         message += f'Total operation time: {total_op_time:0.2f}s\n'
         message += f'Total execution time: {self.total_exec_time():0.2f}s'
-        self.logger.info(message)
+        print(message)
 
     def duration_summary(self):
         summary = []

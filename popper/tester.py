@@ -196,5 +196,5 @@ class Tester():
         for i in range(len(rules)):
             subrules = [rules[j] for j in range(len(rules)) if i != j]
             if self.is_complete(subrules, pos):
-                return self.reduce(subrules, pos)
+                return self.reduce_subset(subrules, pos)
         return frozenset(rules)

@@ -1,5 +1,4 @@
 from popper.util import Settings, parse_settings
-# from popper.loop import learn_solution, show_hspace
 from popper.dcc import dcc
 
 if __name__ == '__main__':
@@ -8,7 +7,6 @@ if __name__ == '__main__':
         show_hspace(settings)
     else:
         _prog, stats = dcc(settings)
-        stats.log_final_result()
         if settings.stats:
             stats.show()
 

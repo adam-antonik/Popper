@@ -43,15 +43,15 @@ def generate_program(model):
                 raise Exception(f'Unrecognised argument direction "{arg_dir_str}"')
             directions[pred_name][arg_index] = arg_dir
 
-        elif atom.name == 'before':
-            clause1 = atom.arguments[0].number
-            clause2 = atom.arguments[1].number
-            before[clause1].add(clause2)
+        # elif atom.name == 'before':
+        #     clause1 = atom.arguments[0].number
+        #     clause2 = atom.arguments[1].number
+        #     before[clause1].add(clause2)
 
-        elif atom.name == 'min_clause':
-            clause = atom.arguments[0].number
-            min_clause_num = atom.arguments[1].number
-            min_clause[clause] = max(min_clause[clause], min_clause_num)
+        # elif atom.name == 'min_clause':
+        #     clause = atom.arguments[0].number
+        #     min_clause_num = atom.arguments[1].number
+        #     min_clause[clause] = max(min_clause[clause], min_clause_num)
 
     clauses = []
     for clause_id in clause_id_to_head:
@@ -66,5 +66,5 @@ def generate_program(model):
             body.add(Literal(body_pred, body_args, body_modes))
         body = frozenset(body)
         clauses.append((head, body))
-    clauses = tuple(clauses)
-    return (clauses, before, min_clause)
+    clauses = frozenset(clauses)
+    return clauses

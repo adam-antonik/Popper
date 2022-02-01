@@ -25,10 +25,12 @@ def atom_to_symbol(pred, args):
     return Function(name = pred, arguments = xs)
 
 class ClingoGrounder():
-    def __init__(self):
+    def __init__(self, max_rules, max_vars):
         self.seen_assignments = {}
+        self.max_rules = max_rules
+        self.max_vars = max_vars
 
-    def find_bindings(self, clause, max_clauses, max_vars):
+    def find_bindings(self, clause):
         (_, body) = clause
         all_vars = Grounding.find_all_vars(body)
         if len(all_vars) == 0:
@@ -69,9 +71,9 @@ class ClingoGrounder():
             +
             f"""\
             #const num_c_vars={c_var_count}.
-            #const num_c_vals={max_clauses}.
+            #const num_c_vals={self.max_rules}.
             #const num_v_vars={v_var_count}.
-            #const num_v_vals={max_vars}.
+            #const num_v_vals={self.max_vars}.
         """)
 
         # add constraints to the ASP program based on the AST thing
@@ -116,11 +118,13 @@ class ClingoGrounder():
 class ClingoSolver():
 
     @staticmethod
-    def load_alan(settings, ctrl):
+    def load_alan(settings, ctrl, max_rules):
         alan = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
         ctrl.add('alan', [], alan)
         with open(settings.bias_file) as f:
-            ctrl.add('bias', [], f.read())
+            bias = f.read()
+        bias += f'\nmax_clauses({max_rules}).\n'
+        ctrl.add('bias', [], bias)
         ctrl.ground([('alan', []), ('bias', [])])
 
     @staticmethod
@@ -135,13 +139,13 @@ class ClingoSolver():
             formatting(num_models, m.symbols(shown = True))
         solver.solve(on_model=on_model)
 
-    def __init__(self, settings):
+    def __init__(self, settings, max_rules):
         self.solver = clingo.Control(settings.clingo_args)
         # AC: why an OrderedDict? We never remove from it
         self.assigned = OrderedDict()
         self.seen_symbols = {}
 
-        ClingoSolver.load_alan(settings, self.solver)
+        ClingoSolver.load_alan(settings, self.solver, max_rules)
 
         NUM_OF_LITERALS = (
         """
