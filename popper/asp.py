@@ -117,15 +117,6 @@ class ClingoGrounder():
 
 class ClingoSolver():
 
-    @staticmethod
-    def load_alan(settings, ctrl, max_rules):
-        alan = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
-        ctrl.add('alan', [], alan)
-        with open(settings.bias_file) as f:
-            bias = f.read()
-        bias += f'\nmax_clauses({max_rules}).\n'
-        ctrl.add('bias', [], bias)
-        ctrl.ground([('alan', []), ('bias', [])])
 
     @staticmethod
     def get_hspace(settings, formatting):
@@ -145,7 +136,15 @@ class ClingoSolver():
         self.assigned = OrderedDict()
         self.seen_symbols = {}
 
-        ClingoSolver.load_alan(settings, self.solver, max_rules)
+        # LOAD ALAN
+        alan = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
+        self.solver.add('alan', [], alan)
+        print(max_rules)
+        with open(settings.bias_file) as f:
+            bias = f.read()
+        bias += f'\nmax_clauses({max_rules}).\n'
+        self.solver.add('bias', [], bias)
+        self.solver.ground([('alan', []), ('bias', [])])
 
         NUM_OF_LITERALS = (
         """

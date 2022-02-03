@@ -76,3 +76,15 @@ find_redundant_clauses(P1,K1,K2):-
     select(K1-C1,P1,P2),
     member(K2-C2,P2),
     subsumes(C1,C2).
+
+
+
+%% subsumes2(C,D) :-
+    %% \+ \+ (copy_term(D,D2), numbervars(D2,0,_), subset(C,D2)).
+
+
+subsumes3(_, []).
+subsumes3(T1, [R2|T2]):-
+    member(R1, T1),
+    subsumes(R1, R2),
+    subsumes3(T1, T2).

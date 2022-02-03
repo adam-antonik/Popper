@@ -3,7 +3,7 @@
 %% 0.83s user 0.03s system 99% cpu 0.860 total
 
 %% max_clauses(3).
-max_vars(5).
+max_vars(6).
 max_body(6).
 
 head_pred(f,1).

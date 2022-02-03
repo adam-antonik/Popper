@@ -119,6 +119,24 @@ class Tester():
             r1 = dic['R1']
             yield rules[r0], rules[r1]
 
+    def test(self, rules, pos, neg):
+        covered = self.success_set(rules)
+
+        tp, fn, tn, fp = 0, 0, 0, 0
+
+        for p in pos:
+            if p in covered:
+                tp +=1
+            else:
+                fn +=1
+        for n in neg:
+            if n in covered:
+                fp +=1
+            else:
+                tn +=1
+
+        return tp, fn, tn, fp
+
     def test_all(self, rules):
         covered = self.success_set(rules)
 
@@ -198,3 +216,22 @@ class Tester():
             if self.is_complete(subrules, pos):
                 return self.reduce_subset(subrules, pos)
         return frozenset(rules)
+
+    def subsumes(self, r1, r2):
+        r1 = list(r1)
+        r1 = f"[{','.join(x for x in r1)}]"
+        r2 = list(r2)
+        r2 = f"[{','.join(x for x in r2)}]"
+        res = list(self.prolog.query(f'subsumes2({r1},{r2})'))
+        return len(res) > 0
+
+
+    def subsumes2(self, t1, t2):
+        def fmt(r):
+            r = list(r)
+            return '[' + ','.join(x for x in r) + ']'
+
+        t1 = '['+ ','.join(fmt(r) for r in t1) + ']'
+        t2 = '['+ ','.join(fmt(r) for r in t2) + ']'
+        res = list(self.prolog.query(f'subsumes3({t1},{t2})'))
+        return len(res) > 0

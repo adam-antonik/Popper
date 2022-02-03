@@ -29,15 +29,21 @@ class Constrain:
         self.seen_clause_handle = {}
         self.added_clauses = set()
 
+    # def make_literal_handle(self, literal):
+        # return f'{literal.predicate}{"".join(literal.arguments)}'
+
     def make_literal_handle(self, literal):
-        return f'{literal.predicate}{"".join(literal.arguments)}'
+        return f'{literal.predicate}({".".join(literal.arguments)})'
 
     def make_clause_handle(self, clause):
         if clause in self.seen_clause_handle:
             return self.seen_clause_handle[clause]
-        (head, body) = clause
+        head, body = clause
         body_literals = sorted(body, key = operator.attrgetter('predicate'))
-        clause_handle = ''.join(self.make_literal_handle(literal) for literal in [head] + body_literals)
+        head = self.make_literal_handle(head)
+        body = ','.join(self.make_literal_handle(literal) for literal in body_literals)
+        # clause_handle = ''.join(self.make_literal_handle(literal) for literal in [head] + body_literals)
+        clause_handle = f'{head}:- {body}'
         self.seen_clause_handle[clause] = clause_handle
         return clause_handle
 
