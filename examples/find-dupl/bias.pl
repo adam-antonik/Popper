@@ -5,7 +5,7 @@
 
 max_vars(5).
 max_body(5).
-max_clauses(2).
+%% max_clauses(2).
 
 head_pred(f,2).
 body_pred(f,2).

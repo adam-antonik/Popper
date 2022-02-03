@@ -85,12 +85,12 @@ class Constrain:
     #         literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
     #         literals.append(body_size_literal(vo_clause(clause_number), len(body)))
 
-    #     for clause_id1, clause_numbers in before.items():
-    #         for clause_id2 in clause_numbers:
-    #             literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
+    #     # for clause_id1, clause_numbers in before.items():
+    #     #     for clause_id2 in clause_numbers:
+    #     #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
 
-    #     for clause_number, clause in enumerate(program):
-    #         literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+    #     # for clause_number, clause in enumerate(program):
+    #     #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
 
     #     num_clauses = len(program)
     #     # ensure that each clause_var is ground to a unique value

@@ -1,4 +1,4 @@
-max_clauses(6).
+%% max_clauses(6).
 max_vars(6).
 max_body(5).
 

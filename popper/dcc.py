@@ -14,8 +14,10 @@ from collections import defaultdict
 WITH_OPTIMISTIC = False
 WITH_CHUNKING = True
 WITH_LAZINESS = True
-MAX_RULES = 10
-MAX_RULE_SIZE = 6
+WITH_MIN_RULE_SIZE = True
+WITH_SIZE_DECREMENT = True
+WITH_CRAP_CHECK = False
+MAX_RULES = 6
 
 class Bounds:
     def __init__(self, max_literals):
@@ -23,10 +25,12 @@ class Bounds:
         self.max_literals = max_literals
         self.min_rules = 1
         self.max_rules = MAX_RULES
+        self.min_rule_size = 1
 
 class Constraints:
 
-    def __init__(self, generalisation, specialisation, redundancy, subsumption):
+    def __init__(self, tracker, generalisation, specialisation, redundancy, subsumption):
+        self.tracker = tracker
         self.handles = set()
 
         def filter_rules(xs):
@@ -45,14 +49,13 @@ class Constraints:
     def all(self):
         return self.handles | self.generalisation | self.specialisation | self.redundancy | self.subsumption
 
-    def reduce(self, tracker):
-        # pass
-        self.reduce_generalisation(tracker)
-        self.reduce_specialisation(tracker)
-        self.reduce_redundancy(tracker)
-        self.reduce_handles(tracker)
+    def reduce(self):
+        self.reduce_generalisation()
+        self.reduce_specialisation()
+        self.reduce_redundancy()
+        self.reduce_handles()
 
-    def reduce_handles(self, tracker):
+    def reduce_handles(self):
         needed = set()
         for _head, body in self.generalisation | self.specialisation | self.redundancy | self.subsumption:
             needed.update(get_rule_ids(body))
@@ -66,7 +69,7 @@ class Constraints:
             if k in needed:
                 asda.add(k)
 
-    def reduce_generalisation(self, tracker):
+    def reduce_generalisation(self):
         # SUPPOSE WE HAVE TWO GENERALISATION CONSTRAINTS FOR THE RULES
         # H1 = H :- A
         # H2 = {H :- A.; H - B}
@@ -96,7 +99,7 @@ class Constraints:
                 asda.add(rule)
         self.generalisation = asda
 
-    def reduce_specialisation(self, tracker):
+    def reduce_specialisation(self):
         # SUPPOSE WE HAVE TWO SPECIALISATION CONSTRAINTS FOR THE RULES
         # R1 = H :- A
         # R2 = H :- A, B
@@ -129,7 +132,7 @@ class Constraints:
                 asda.add(rule)
         self.specialisation = asda
 
-    def reduce_redundancy(self, tracker):
+    def reduce_redundancy(self):
         gens = set()
         for rule in self.generalisation:
             _head, body = rule
@@ -154,6 +157,7 @@ class Tracker:
         self.best_progs = {}
         self.seen_consistent = set()
         self.seen_inconsistent = set()
+        self.crap_progs = set()
 
 def bind_vars_in_cons(stats, grounder, clauses):
     ground_cons = set()
@@ -186,12 +190,6 @@ def get_rule_ids(body):
         ids.add(frozenset(x.strip().replace('.',',') for x in b.split(',')))
     return frozenset(ids)
 
-# def get_handle(literal):
-#     sym = literal.arguments[0]
-#     args = sym.split(':-')
-#     b = args[1]
-#     return frozenset(x.strip().replace('.',',') for x in b.split(','))
-
 def get_something(body):
     ids = set()
     for lit in body:
@@ -201,18 +199,21 @@ def get_something(body):
 def tmp_subsumes(t1, t2):
     return all(any(r1.issubset(r2) for r1 in t1) for r2 in t2)
 
-
 def build_constraints(settings, stats, constrainer, tester, program, pos):
     cons = set()
 
+    if tester.is_complete(program, pos):
+        cons.update(constrainer.generalisation_constraint(program))
+    else:
+        cons.update(constrainer.specialisation_constraint(program))
+
     if tester.is_inconsistent(program):
         cons.update(constrainer.generalisation_constraint(program))
+    else:
+        cons.update(constrainer.specialisation_constraint(program))
 
     if tester.is_totally_incomplete(program, pos):
         cons.update(constrainer.redundancy_constraint(program))
-
-    if tester.is_incomplete(program, pos):
-        cons.update(constrainer.specialisation_constraint(program))
 
     # eliminate rules subsumed by this one
     for rule in program:
@@ -232,10 +233,18 @@ def build_constraints(settings, stats, constrainer, tester, program, pos):
         for r1, r2 in tester.find_redundant_clauses(tuple(program)):
             cons.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
-        # eliminate inconsistent rules
         for rule in program:
-            if tester.is_inconsistent([rule]):
-                cons.update(constrainer.generalisation_constraint([rule]))
+            sub_prog = [rule]
+
+            if tester.is_complete(sub_prog, pos):
+                cons.update(constrainer.generalisation_constraint(sub_prog))
+            else:
+                cons.update(constrainer.specialisation_constraint(sub_prog))
+
+            if tester.is_inconsistent(sub_prog):
+                cons.update(constrainer.generalisation_constraint(sub_prog))
+            else:
+                cons.update(constrainer.specialisation_constraint(sub_prog))
 
         # eliminate totally incomplete rules
         if all(Clause.is_separable(rule) for rule in program):
@@ -273,47 +282,26 @@ def print_stats(cons, stats, grounder):
 def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
     settings = tracker.settings
     stats = tracker.stats
-    solver = ClingoSolver(settings, chunk_bounds.max_rules)
     tester = tracker.tester
-    grounder = ClingoGrounder(chunk_bounds.max_rules, solver.max_vars)
     constrainer = Constrain()
+    solver = ClingoSolver(settings, chunk_bounds.max_rules, chunk_bounds.min_rule_size)
+    grounder = ClingoGrounder(chunk_bounds.max_rules, solver.max_vars)
+
     best_score = None
 
     dbg('POS:', chunk_bounds.max_literals, chunk_bounds.max_rules)
 
+    # FILTER OLD CONSTRAINTS
+    with tracker.stats.duration('filtering'):
+        bootstap_cons.reduce()
+
     all_fo_cons = bootstap_cons.all()
 
-    # BOOTSTRAPPING
-    with tracker.stats.duration('bootstrapping'):
-        print_stats(bootstap_cons, stats, grounder)
-        # GROUND CONSTRAINTS
-        with stats.duration('ground_bootstrap'):
-            ground_cons = bind_vars_in_cons(stats, grounder, all_fo_cons)
+    # GROUND OLD CONSTRAINTS
+    with stats.duration('ground_bootstrap'):
+        ground_cons = bind_vars_in_cons(stats, grounder, all_fo_cons)
 
-    with tracker.stats.duration('filtering'):
-        bootstap_cons.reduce(tracker)
-        print_stats(bootstap_cons, stats, grounder)
-
-        # print('GENERALISATION')
-        # for x in sorted(get_something(b) for h, b in bootstap_cons.generalisation):
-            # print(x)
-
-        # print('SPECIALISATION')
-        # for x in sorted(get_something(b) for h, b in bootstap_cons.specialisation):
-        #     print(x)
-
-        # print('SUBSUMPTION')
-        # for x in sorted(get_something(b) for h, b in bootstap_cons.subsumption):
-            # pass
-            # print(x)
-
-        # print('REDUNDANCY')
-        # for x in sorted(get_something(b) for h, b in bootstap_cons.redundancy):
-        #     print(x)
-        #     if x in TMP:
-        #         print("CAN SKIP!!!!!!!!!!!!!")
-
-    # ADD CONSTRAINTS TO SOLVER
+    # ADD OLD CONSTRAINTS TO SOLVER
     with stats.duration('add_bootstrap'):
         solver.add_ground_clauses(ground_cons)
 
@@ -332,12 +320,12 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
 
             tracker.stats.total_programs += 1
 
-            # print('')
-            # pprint(program)
-            # for rule in program:
-            #     tmp = frozenset([rule])
-            #     assert(tmp not in tracker.seen_inconsistent)
-            #     print(tracker.tester.test(tmp, pos, neg), tracker.tester.test_all(tmp), tmp in tracker.seen_consistent)
+            if tracker.settings.debug:
+                print('')
+                pprint(program)
+                for rule in program:
+                    tmp = frozenset([rule])
+                    print(tracker.tester.test(tmp, pos, neg), tracker.tester.test_all(tmp), tmp in tracker.seen_consistent)
 
             assert(all(frozenset([rule]) not in tracker.seen_inconsistent for rule in program))
 
@@ -346,6 +334,20 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
             with stats.duration('test'):
                 if tester.is_complete(program, pos) and tester.is_consistent_all(program):
                     solution_found = True
+
+            if WITH_CRAP_CHECK:
+                with stats.duration('check crap'):
+                    if program in tracker.crap_progs:
+                        print('CRAP1')
+                        pprint(program)
+                    for rule in program:
+                        if frozenset([rule]) in tracker.crap_progs:
+                            print('CRAP2')
+                            pprint([rule])
+
+                with stats.duration('add crap'):
+                    if not tracker.recursion:
+                        check_crap(tracker, program)
 
             cache_rules(tracker, program)
 
@@ -414,8 +416,10 @@ def update_best_prog(tracker, prog):
 
     if tracker.best_prog_errors > 0:
         return
+
     if tracker.best_prog == None:
         return
+
     old_max_literals = tracker.max_total_literals
     tracker.max_total_literals = min(tracker.best_prog_size -1, tracker.max_total_literals)
     dbg(f'NEW MAX_LITERALS - OLD:{old_max_literals} NEW:{tracker.max_total_literals}')
@@ -424,11 +428,18 @@ def calc_max_rules(tracker, best_prog, chunk_exs):
     k = tracker.max_total_rules
     if best_prog != None:
         k = min(k, len(best_prog))
-    # SOMETHING ABOUT RECURSION + PI
+
+    if tracker.recursion:
+        return k
+
+    if WITH_SIZE_DECREMENT:
+        if best_prog != None and len(best_prog) > 1:
+            k = min(k, len(best_prog)-1)
+
     k = min(k, len(chunk_exs))
     return k
 
-def calc_literal_bounds(tracker, best_prog):
+def calc_max_literals(tracker, best_prog):
     k = tracker.max_total_literals
     if best_prog != None:
         best_prog_size = num_literals(best_prog)
@@ -436,12 +447,32 @@ def calc_literal_bounds(tracker, best_prog):
         k = min(k, best_prog_size-1)
     return k
 
+def calc_min_rule_size(tracker, best_prog):
+    if best_prog != None:
+        return 1 + min(len(body) for head, body in best_prog)
+    return 1
+
 def calc_chunk_bounds(tracker, best_prog, chunk_exs):
     bounds = Bounds(tracker.max_total_literals)
     bounds.max_rules = calc_max_rules(tracker, best_prog, chunk_exs)
     bounds.min_literals = 1 # min_literals = max(num_literals(best_prog[ex]) for ex in exs)
-    bounds.max_literals = calc_literal_bounds(tracker, best_prog)
+    bounds.max_literals = calc_max_literals(tracker, best_prog)
+    bounds.min_rule_size = calc_min_rule_size(tracker, best_prog)
     return bounds
+
+def check_crap(tracker, prog):
+    prog_size = num_literals(prog)
+    xs = tracker.tester.pos_covered(prog)
+    if xs in tracker.pos_coverage:
+        if tracker.pos_coverage[xs] == prog:
+            pass
+        elif prog_size < num_literals(tracker.pos_coverage[xs]):
+            tracker.crap_progs.add(tracker.pos_coverage[xs])
+            tracker.pos_coverage[xs] = prog
+        else:
+            tracker.crap_progs.add(prog)
+    else:
+        tracker.pos_coverage[xs] = prog
 
 def check_old_programs(tracker, chunk_exs, chunk_bounds):
     tester = tracker.tester
@@ -454,16 +485,17 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
 
     chunk_prog = None
 
-    # # first check consistent programs
+    # CHECK CONSISTENT PROGRAMS
     with tracker.stats.duration('check_old_consistent'):
 
-        # TODO: ORDER BY SIZE OR GENERALITY TO REDUCE THE NUMBER OF CHECKS
         for prog in tracker.seen_consistent:
             prog_size = num_literals(prog)
 
-            # TODO: WOULD HELP IF WE ORDERED THE PROGRAMS BY SIZE
             if prog_size > chunk_bounds.max_literals:
                 continue
+
+            if not tracker.recursion:
+                check_crap(tracker, prog)
 
             if tester.is_complete(prog, chunk_exs):
                 chunk_prog = prog
@@ -489,12 +521,11 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
                 for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
                     subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
-    # # THEN CHECK INCONSISTENT PROGRAMS
+    # CHECK INCONSISTENT PROGRAMS
     with tracker.stats.duration('check_old_inconsistent'):
         for prog in tracker.seen_inconsistent:
             prog_size = num_literals(prog)
 
-            # TODO: WOULD HELP IF WE ORDERED THE PROGRAMS BY SIZE
             if prog_size > chunk_bounds.max_literals:
                 continue
 
@@ -517,8 +548,7 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
                 for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
                     subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
-
-    cons = Constraints(generalisation, specialisation, redundancy, subsumption)
+    cons = Constraints(tracker, generalisation, specialisation, redundancy, subsumption)
 
     return chunk_prog, cons
 
@@ -652,7 +682,12 @@ def perform_chunking(tracker):
 
 def dcc(settings):
     tracker = Tracker()
+    tracker.pos_coverage = {}
     tracker.settings = settings
+    tracker.settings.WITH_OPTIMISTIC = WITH_OPTIMISTIC
+    tracker.settings.WITH_CHUNKING = WITH_CHUNKING
+    tracker.settings.WITH_LAZINESS = WITH_LAZINESS
+    tracker.settings.WITH_MIN_RULE_SIZE = WITH_MIN_RULE_SIZE
     tracker.tester = Tester(settings)
     tracker.max_total_literals = settings.max_literals
     tracker.stats = Stats(log_best_programs=settings.info)
@@ -660,6 +695,10 @@ def dcc(settings):
     tracker.neg = frozenset(tracker.tester.neg)
     tracker.unsolvable = set()
     tracker.best_progs = {ex:None for ex in tracker.pos}
+
+    # VERY HACKY
+    with open(settings.bias_file) as f:
+        tracker.recursion = 'enable_recursion' in f.read()
 
     # size of the chunks/partitions of the examples
     chunk_size = 1

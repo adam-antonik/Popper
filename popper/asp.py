@@ -130,7 +130,7 @@ class ClingoSolver():
             formatting(num_models, m.symbols(shown = True))
         solver.solve(on_model=on_model)
 
-    def __init__(self, settings, max_rules):
+    def __init__(self, settings, max_rules, min_rule_size):
         self.solver = clingo.Control(settings.clingo_args)
         # AC: why an OrderedDict? We never remove from it
         self.assigned = OrderedDict()
@@ -139,10 +139,15 @@ class ClingoSolver():
         # LOAD ALAN
         alan = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
         self.solver.add('alan', [], alan)
-        print(max_rules)
         with open(settings.bias_file) as f:
             bias = f.read()
         bias += f'\nmax_clauses({max_rules}).\n'
+
+        # SET MIN RULE SIZE
+        if settings.WITH_MIN_RULE_SIZE and min_rule_size > 1:
+            for i in range(1, min_rule_size):
+                bias += f':- clause(C),body_size(C,{i}).\n'
+
         self.solver.add('bias', [], bias)
         self.solver.ground([('alan', []), ('bias', [])])
 

@@ -105,6 +105,10 @@ class Tester():
         self.seen_prog[k] = xs
         return xs
 
+    def pos_covered(self, rules):
+        covered = self.success_set(rules)
+        return frozenset(x for x in self.pos if x in covered)
+
     def find_redundant_clauses(self, rules):
         prog = []
         for i, (head, body) in enumerate(rules):
