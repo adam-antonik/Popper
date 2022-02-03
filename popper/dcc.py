@@ -14,9 +14,9 @@ from collections import defaultdict
 WITH_OPTIMISTIC = False
 WITH_CHUNKING = True
 WITH_LAZINESS = True
-WITH_MIN_RULE_SIZE = True
-WITH_SIZE_DECREMENT = True
-WITH_CRAP_CHECK = False
+WITH_MIN_RULE_SIZE = False
+WITH_SIZE_DECREMENT = False
+WITH_CRAP_CHECK = True
 MAX_RULES = 6
 
 class Bounds:
@@ -665,7 +665,9 @@ def learn_iteration_prog(tracker, all_chunks, chunk_size):
         # chunk_prog is guaranteed to be complete, consistent, and smaller than the previous best
         iteration_progs.add(chunk_prog)
 
-    return remove_redundancy(tracker.tester, iteration_progs)
+    iteration_prog = remove_redundancy(tracker.tester, iteration_progs)
+    assert(tracker.tester.is_complete(iteration_prog, chunk_exs))
+    return iteration_prog
 
 def perform_chunking(tracker):
     tmp_chunks = {}

@@ -1,4 +1,6 @@
-%% dcc paper
+%% target theory is:
+%% f :- c, d.
+
 max_vars(5).
 max_body(5).
 
