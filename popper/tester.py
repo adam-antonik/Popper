@@ -218,7 +218,7 @@ class Tester():
         rules = list(rules)
         for i in range(len(rules)):
             subrules = rules[:i] + rules[i+1:]
-            if self.is_complete(subrules, pos):
+            if self.is_complete(subrules, pos) and self.is_consistent_all(subrules):
                 return self.reduce_subset(subrules, pos)
         return frozenset(rules)
 

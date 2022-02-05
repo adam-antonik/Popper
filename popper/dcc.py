@@ -146,7 +146,8 @@ class Constraints:
         self.redundancy = asda
 
 class Tracker:
-    def __init__(self):
+    def __init__(self, settings):
+        self.settings = settings
         self.min_total_literals = 1
         self.max_total_literals = None
         self.min_total_rules = 1
@@ -158,6 +159,27 @@ class Tracker:
         self.seen_consistent = set()
         self.seen_inconsistent = set()
         self.seen_crap = set()
+        self.pos_coverage = {}
+
+        self.settings.WITH_OPTIMISTIC = WITH_OPTIMISTIC
+        self.settings.WITH_CHUNKING = WITH_CHUNKING
+        self.settings.WITH_LAZINESS = WITH_LAZINESS
+        self.settings.WITH_MIN_RULE_SIZE = WITH_MIN_RULE_SIZE
+        self.tester = Tester(settings)
+        self.max_total_literals = settings.max_literals
+        self.stats = Stats(log_best_programs=settings.info)
+        self.pos = frozenset(self.tester.pos)
+        self.neg = frozenset(self.tester.neg)
+        self.unsolvable = set()
+        self.best_progs = {ex:None for ex in self.pos}
+        self.stats.crap_count = 0
+
+        # VERY HACKY
+        with open(settings.bias_file) as f:
+            f_txt = f.read()
+            self.recursion = 'enable_recursion' in f_txt
+            self.predicate_invention = 'enable_pi' in f_txt
+
 
 def bind_vars_in_cons(stats, grounder, clauses):
     ground_cons = set()
@@ -413,8 +435,8 @@ def dbg(*args):
 def pprint(prog):
     for rule in prog:
         h, b = rule
-        # dbg(Clause.to_code(rule))
-        print(Clause.to_code(rule), ','.join(str(x) for x in b))
+        dbg(Clause.to_code(rule))
+        # print(Clause.to_code(rule), ','.join(str(x) for x in b))
 
 def num_literals(prog):
     return sum(1 + len(body) for head_, body in prog)
@@ -634,7 +656,6 @@ def reuse_seen(tracker, chunk_exs, iteration_progs, chunk_bounds):
     seen = sorted(seen, key = lambda x: num_literals(x))
     for seen_prog in seen:
         if tracker.tester.is_complete(seen_prog, chunk_exs):
-            # dbg('reusing seen prog')
             return seen_prog
     return None
 
@@ -679,13 +700,13 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
 
     chunk_prog = frozenset(new_solution)
 
-    if tracker.tester.is_complete_all(chunk_prog) and tracker.tester.is_complete_all(chunk_prog):
-        dbg('SOLUTION FOUND!!! CAN STOP EARLY!!!')
-        # return chunk_prog
-
     assert(tracker.tester.is_complete(chunk_prog, chunk_exs))
     assert(tracker.tester.is_consistent_all(chunk_prog))
     assert(not tracker.tester.check_redundant_clause(chunk_prog))
+
+    # if tracker.tester.is_complete_all(chunk_prog) and tracker.tester.is_complete_all(chunk_prog):
+    #     dbg('SOLUTION FOUND!!! CAN STOP EARLY!!!')
+    #     return chunk_prog
 
     dbg('NEW PROGRAM:')
     pprint(chunk_prog)
@@ -714,26 +735,20 @@ def learn_iteration_prog(tracker, all_chunks, chunk_size):
             tracker.best_progs[ex] = chunk_prog
 
         assert(tracker.tester.is_complete(chunk_prog, chunk_exs))
+        assert(tracker.tester.is_consistent_all(chunk_prog))
 
-        # TODO: ADD
-        # if tracker.tester.is_complete_all(chunk_prog) and tracker.tester.is_consistent_all(chunk_prog):
-            # return chunk_prog
-
-        # TMP!!
-        if len(tracker.tester.reduce_subset(chunk_prog, chunk_exs)) != len(chunk_prog):
-            print('TMP_CHUNK_PROG')
-            pprint(chunk_prog)
-            print('TMP_REDUCE_CHUNK_PROG')
-            pprint(tracker.tester.reduce_subset(chunk_prog, chunk_exs))
-
-        assert(len(tracker.tester.reduce_subset(chunk_prog, chunk_exs)) == len(chunk_prog))
+        # IF WE FIND A PROGRAM THAT IS COMPLETE AND CONSISTENT FOR ALL EXAMPLES THEN WE CAN STOP
+        if tracker.tester.is_complete_all(chunk_prog) and tracker.tester.is_consistent_all(chunk_prog):
+            dbg('SOLUTION FOUND!!! CAN STOP EARLY!!!')
+            return chunk_prog, True
 
         # chunk_prog is guaranteed to be complete, consistent, and smaller than the previous best
         iteration_progs.add(chunk_prog)
 
     iteration_prog = remove_redundancy(tracker.tester, form_union(iteration_progs))
     assert(tracker.tester.is_complete(iteration_prog, chunk_exs))
-    return iteration_prog
+    assert(tracker.tester.is_complete_all(iteration_prog))
+    return iteration_prog, False
 
 def perform_chunking(tracker):
     tmp_chunks = {}
@@ -749,33 +764,11 @@ def perform_chunking(tracker):
     return list(tmp_chunks.values())
 
 def dcc(settings):
-    tracker = Tracker()
-    tracker.pos_coverage = {}
-    tracker.settings = settings
-    tracker.settings.WITH_OPTIMISTIC = WITH_OPTIMISTIC
-    tracker.settings.WITH_CHUNKING = WITH_CHUNKING
-    tracker.settings.WITH_LAZINESS = WITH_LAZINESS
-    tracker.settings.WITH_MIN_RULE_SIZE = WITH_MIN_RULE_SIZE
-    tracker.tester = Tester(settings)
-    tracker.max_total_literals = settings.max_literals
-    tracker.stats = Stats(log_best_programs=settings.info)
-    tracker.pos = frozenset(tracker.tester.pos)
-    tracker.neg = frozenset(tracker.tester.neg)
-    tracker.unsolvable = set()
-    tracker.best_progs = {ex:None for ex in tracker.pos}
-    tracker.stats.crap_count = 0
-
-    # VERY HACKY
-    with open(settings.bias_file) as f:
-        f_txt = f.read()
-        tracker.recursion = 'enable_recursion' in f_txt
-        tracker.predicate_invention = 'enable_pi' in f_txt
+    # maintains stuff during the search
+    tracker = Tracker(settings)
 
     # size of the chunks/partitions of the examples
     chunk_size = 1
-
-    # TMP!!!!!!
-    # chunk_size = len(tracker.pos)
 
     # initially partitions each example into its own partition
     all_chunks = [[x] for x in tracker.pos]
@@ -784,19 +777,29 @@ def dcc(settings):
         dbg('CHUNK_SIZE', chunk_size)
 
         # program for this chunk size is the union of the chunk progs
-        iteration_prog = learn_iteration_prog(tracker, all_chunks, chunk_size)
+        iteration_prog, proven_optimal = learn_iteration_prog(tracker, all_chunks, chunk_size)
+
+        # TODO: add early stopping here
+        if proven_optimal:
+            if best_prog_improvement(tracker, iteration_prog):
+                update_best_prog(tracker, iteration_prog)
+            break
 
         dbg(f'CHUNK:{chunk_size} size:{num_literals(iteration_prog)} errors:{calc_score(tracker.tester, iteration_prog)}')
+
         pprint(iteration_prog)
 
         if best_prog_improvement(tracker, iteration_prog):
-            # update the best program for each example: we try to logically reduce the iteration_prog with respect to each positive example
+            # update the best program for each example
+            # we logically reduce the iteration_prog with respect to each positive example
             for ex in flatten(all_chunks):
                 tracker.best_progs[ex] = tracker.tester.reduce_subset(iteration_prog, [ex])
+
             update_best_prog(tracker, iteration_prog)
 
             if WITH_OPTIMISTIC and tracker.best_prog_errors == 0:
                 break
+
         # break
         if WITH_CHUNKING:
             all_chunks = perform_chunking(tracker)
@@ -807,6 +810,7 @@ def dcc(settings):
         # double the chunk size (so the loop runs for at most log(len(pos)) iterations)
         if chunk_size > len(tracker.pos):
             break
+
         chunk_size += chunk_size
 
     print(tracker.stats.crap_count)
