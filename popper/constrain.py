@@ -99,6 +99,32 @@ class Constrain:
 
     #     yield (None, tuple(literals))
 
+    def elimination_constraint(self, program):
+        literals = []
+        for clause_number, clause in enumerate(program):
+            head, body = clause
+            clause_handle = self.make_clause_handle(clause)
+            yield from self.make_clause_inclusion_rule(clause, clause_handle)
+            literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
+            # literals.append(body_size_literal(vo_clause(clause_number), len(body)))
+
+        # for clause_id1, clause_numbers in before.items():
+        #     for clause_id2 in clause_numbers:
+        #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
+
+        # for clause_number, clause in enumerate(program):
+        #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+
+        # num_clauses =
+        # ensure that each clause_var is ground to a unique value
+        # literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+        # literals.append(Literal('clause', (num_clauses, ), positive = False))
+
+        # for x in literals:
+        # print(':- ' + ','.join(str(x) for x in literals))
+
+        yield (None, tuple(literals))
+
     # def generalisation_constraint(self, program, before = {}, min_clause = defaultdict(lambda: 0)):
     def generalisation_constraint(self, program):
         literals = []

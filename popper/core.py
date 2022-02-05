@@ -114,6 +114,16 @@ class Literal:
     def my_hash(self):
         return hash((self.predicate, self.arguments))
 
+
+def separable(rules):
+    for rule in rules:
+        if Clause.is_recursive(rule):
+            return False
+        head, body = rule
+        if head.predicate.startswith('inv'):
+            return False
+    return True
+
 class Clause:
     @staticmethod
     def to_code(clause):
@@ -144,7 +154,7 @@ class Clause:
     def is_separable(rule):
         if Clause.is_recursive(rule):
             return False
-        (head, body) = rule
+        head, body = rule
         if head.predicate.startswith('inv'):
             return False
         return True

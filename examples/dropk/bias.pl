@@ -1,11 +1,13 @@
-%% python3 popper.py examples/dropk
-%% f(A,B,C) :- one(B),tail(A,C).
-%% f(A,B,C) :- tail(A,D),decrement(B,E),f(D,E,C).
-%% 0.85s user 0.07s system 102% cpu 0.901 total
+%% 14:19:31 BEST_PROG size:7 errors:0
+%% 14:19:31 f(A,B,C):-decrement(B,E),tail(D,C),f(A,E,D)
+%% 14:19:31 f(A,B,C):-one(B),tail(A,C)
+%% 14:19:31 NEW MAX_LITERALS - OLD:100 NEW:6
+%% 0
+%% Total programs: 1296
+%% Total execution time: 24.39s
 
 max_vars(6).
 max_body(6).
-%% max_clauses(2).
 enable_recursion.
 
 head_pred(f,3).

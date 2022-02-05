@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from popper.util import Settings, parse_settings
 from popper.dcc import dcc
 

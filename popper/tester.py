@@ -15,7 +15,7 @@ class Tester():
         self.eval_timeout = settings.eval_timeout
         self.cached_redundant_literals = {}
         self.seen_tests = {}
-        self.seen_prog = {}
+        self.cached_success_set = {}
 
         bk_pl_path = self.settings.bk_file
         exs_pl_path = self.settings.ex_file
@@ -90,19 +90,20 @@ class Tester():
     def success_set(self, rules):
         k = hash(frozenset(rules))
 
-        if k in self.seen_prog:
-            return self.seen_prog[k]
+        if k in self.cached_success_set:
+            return self.cached_success_set[k]
 
-        if len(rules) == 1 or not all(Clause.is_separable(rule) for rule in rules):
+        # if a single rule or non-separable
+        if len(rules) == 1 or any(not Clause.is_separable(rule) for rule in rules):
             with self.using(rules):
                 xs = set(next(self.prolog.query('success_set(Xs)'))['Xs'])
-                self.seen_prog[k] = xs
+                self.cached_success_set[k] = xs
                 return xs
 
         xs = set()
         for rule in rules:
             xs.update(self.success_set([rule]))
-        self.seen_prog[k] = xs
+        self.cached_success_set[k] = xs
         return xs
 
     def pos_covered(self, rules):
@@ -203,20 +204,20 @@ class Tester():
         return any(x in self.success_set(rules) for x in self.neg)
 
     # TMP!!!!!
-    def reduce_ss(self, rules):
+    def reduce_success_set_all(self, rules):
         rules = list(rules)
         rules_ss = self.success_set(rules)
         for i in range(len(rules)):
-            subrules = [rules[j] for j in range(len(rules)) if i != j]
+            subrules = rules[:i] + rules[i+1:]
             subrules_ss = self.success_set(subrules)
             if rules_ss == subrules_ss:
-                return self.reduce_ss(subrules)
+                return self.reduce_success_set_all(subrules)
         return frozenset(rules)
 
     def reduce_subset(self, rules, pos):
         rules = list(rules)
         for i in range(len(rules)):
-            subrules = [rules[j] for j in range(len(rules)) if i != j]
+            subrules = rules[:i] + rules[i+1:]
             if self.is_complete(subrules, pos):
                 return self.reduce_subset(subrules, pos)
         return frozenset(rules)
@@ -228,7 +229,6 @@ class Tester():
         r2 = f"[{','.join(x for x in r2)}]"
         res = list(self.prolog.query(f'subsumes2({r1},{r2})'))
         return len(res) > 0
-
 
     def subsumes2(self, t1, t2):
         def fmt(r):
