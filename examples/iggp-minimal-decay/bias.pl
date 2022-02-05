@@ -32,7 +32,3 @@ type(c5,(int,)).
 :-
     clause(C),
     #count{V : clause_var(C,V),var_type(C,V,ex)} != 1.
-
-%% :-
-%%     clause(C),
-%%     #count{Args : body_literal(C,my_succ,_,Args)} > 1.

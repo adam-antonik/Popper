@@ -15,8 +15,12 @@ WITH_OPTIMISTIC = False
 WITH_CHUNKING = True
 WITH_LAZINESS = True
 WITH_MIN_RULE_SIZE = False
+# WITH_MIN_RULE_SIZE = True
 WITH_SIZE_DECREMENT = False
+WITH_SIZE_DECREMENT = True
 WITH_CRAP_CHECK = False
+WITH_CRAP_CHECK = True
+WITH_BOOTSTRAPPING = True
 MAX_RULES = 4
 
 class Bounds:
@@ -177,9 +181,8 @@ class Tracker:
         # VERY HACKY
         with open(settings.bias_file) as f:
             f_txt = f.read()
-            self.recursion = 'enable_recursion' in f_txt
-            self.predicate_invention = 'enable_pi' in f_txt
-
+            self.settings.recursion = 'enable_recursion' in f_txt
+            self.settings.predicate_invention = 'enable_pi' in f_txt
 
 def bind_vars_in_cons(stats, grounder, clauses):
     ground_cons = set()
@@ -383,14 +386,12 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
                     if has_crap:
                         stats.crap_count +=1
 
-                with stats.duration('add crap'):
-                    if not tracker.recursion:
-                        check_crap(tracker, program)
+                if not tracker.settings.recursion:
+                    check_crap(tracker, program)
 
             cache_rules(tracker, program)
 
             if solution_found:
-                print('stats.total_programs', tracker.stats.total_programs)
                 return program
 
             # BUILD CONSTRAINTS
@@ -434,9 +435,7 @@ def dbg(*args):
 
 def pprint(prog):
     for rule in prog:
-        h, b = rule
         dbg(Clause.to_code(rule))
-        # print(Clause.to_code(rule), ','.join(str(x) for x in b))
 
 def num_literals(prog):
     return sum(1 + len(body) for head_, body in prog)
@@ -485,7 +484,7 @@ def calc_max_rules(tracker, best_prog, chunk_exs):
     if best_prog != None:
         k = min(k, len(best_prog))
 
-    if tracker.recursion or tracker.predicate_invention:
+    if tracker.settings.recursion or tracker.settings.predicate_invention:
         return k
 
     if WITH_SIZE_DECREMENT:
@@ -517,6 +516,9 @@ def calc_chunk_bounds(tracker, best_prog, chunk_exs):
     return bounds
 
 def check_crap(tracker, prog):
+    if tracker.tester.is_inconsistent(prog):
+        return
+
     prog_size = num_literals(prog)
     xs = tracker.tester.pos_covered(prog)
     if xs in tracker.pos_coverage:
@@ -542,73 +544,70 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
     chunk_prog = None
 
     # CHECK CONSISTENT PROGRAMS
-    with tracker.stats.duration('check_old_consistent'):
+    for prog in tracker.seen_consistent:
+        prog_size = num_literals(prog)
 
-        for prog in tracker.seen_consistent:
-            prog_size = num_literals(prog)
+        if prog_size > chunk_bounds.max_literals:
+            continue
 
-            if prog_size > chunk_bounds.max_literals:
-                continue
+        if tester.is_complete(prog, chunk_exs):
+            chunk_prog = prog
+            chunk_bounds = calc_chunk_bounds(tracker, chunk_prog, chunk_exs)
+            continue
 
-            if tester.is_complete(prog, chunk_exs):
-                chunk_prog = prog
-                chunk_bounds = calc_chunk_bounds(tracker, chunk_prog, chunk_exs)
-                continue
+        specialisation.update(constrainer.specialisation_constraint(prog))
 
-            specialisation.update(constrainer.specialisation_constraint(prog))
-
-            # TODO: CHECK WHETHER SEPARABLE CHECK IS NECESSARY
-            if separable(prog):
-                if tester.is_totally_incomplete(prog, chunk_exs):
-                    redundancy.update(constrainer.redundancy_constraint(prog))
-            else:
-                if tester.is_totally_incomplete(prog, chunk_exs):
-                    pass
-                    # TODO: FIX - CAN ONLY APPLY WHEN THE PROGRAM HAS A BASECASE
-                    # None included_clause(f(A):- f(C),tail(B.C),tail(A.B),C0),AllDifferent(C0),num_recursive(f,1)
-                    # None included_clause(f(A):- f(B),tail(A.B),tail(B.A),C0),included_clause(f(A):- empty(A),C1),AllDifferent(C0,C1),num_recursive(f,1)
-
-            if tester.is_incomplete(prog, chunk_exs):
-                specialisation.update(constrainer.specialisation_constraint(prog))
-
-            for rule in prog:
-                subsumption.update(constrainer.subsumption_constraint(rule))
-
-            for rule in prog:
-                if tester.rule_has_redundant_literal(rule):
-                    generalisation.update(constrainer.redundant_literal_constraint(rule))
-
-            if len(prog) > 1:
-                for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
-                    subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
-
-    # CHECK INCONSISTENT PROGRAMS
-    with tracker.stats.duration('check_old_inconsistent'):
-        for prog in tracker.seen_inconsistent:
-            prog_size = num_literals(prog)
-
-            if prog_size > chunk_bounds.max_literals:
-                continue
-
-            generalisation.update(constrainer.generalisation_constraint(prog))
-
-            # TODO: CHECK THE RECURSION ISSUE
+        # TODO: CHECK WHETHER SEPARABLE CHECK IS NECESSARY
+        if separable(prog):
             if tester.is_totally_incomplete(prog, chunk_exs):
                 redundancy.update(constrainer.redundancy_constraint(prog))
+        else:
+            if tester.is_totally_incomplete(prog, chunk_exs):
+                pass
+                # TODO: FIX - CAN ONLY APPLY WHEN THE PROGRAM HAS A BASECASE
+                # None included_clause(f(A):- f(C),tail(B.C),tail(A.B),C0),AllDifferent(C0),num_recursive(f,1)
+                # None included_clause(f(A):- f(B),tail(A.B),tail(B.A),C0),included_clause(f(A):- empty(A),C1),AllDifferent(C0,C1),num_recursive(f,1)
 
-            if tester.is_incomplete(prog, chunk_exs):
-                specialisation.update(constrainer.specialisation_constraint(prog))
+        if tester.is_incomplete(prog, chunk_exs):
+            specialisation.update(constrainer.specialisation_constraint(prog))
 
-            for rule in prog:
-                subsumption.update(constrainer.subsumption_constraint(rule))
+        for rule in prog:
+            subsumption.update(constrainer.subsumption_constraint(rule))
 
-            for rule in prog:
-                if tester.rule_has_redundant_literal(rule):
-                    generalisation.update(constrainer.redundant_literal_constraint(rule))
+        for rule in prog:
+            if tester.rule_has_redundant_literal(rule):
+                generalisation.update(constrainer.redundant_literal_constraint(rule))
 
-            if len(prog) > 1:
-                for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
-                    subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
+        if len(prog) > 1:
+            for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
+                subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
+
+    # CHECK INCONSISTENT PROGRAMS
+    for prog in tracker.seen_inconsistent:
+        prog_size = num_literals(prog)
+
+        if prog_size > chunk_bounds.max_literals:
+            continue
+
+        generalisation.update(constrainer.generalisation_constraint(prog))
+
+        # TODO: CHECK THE RECURSION ISSUE
+        if tester.is_totally_incomplete(prog, chunk_exs):
+            redundancy.update(constrainer.redundancy_constraint(prog))
+
+        if tester.is_incomplete(prog, chunk_exs):
+            specialisation.update(constrainer.specialisation_constraint(prog))
+
+        for rule in prog:
+            subsumption.update(constrainer.subsumption_constraint(rule))
+
+        for rule in prog:
+            if tester.rule_has_redundant_literal(rule):
+                generalisation.update(constrainer.redundant_literal_constraint(rule))
+
+        if len(prog) > 1:
+            for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
+                subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
     for prog in tracker.seen_crap:
         generalisation.update(constrainer.elimination_constraint(prog))
@@ -629,15 +628,14 @@ def remove_redundancy(tester, old_prog):
     new_prog = tester.reduce_success_set_all(old_prog)
     new_success_set = tester.success_set(new_prog)
     assert(old_success_set == new_success_set)
-
     if len(new_prog) < len(old_prog):
         dbg(f'reduced program from {len(old_prog)} to {len(new_prog)}')
-        dbg('old program:')
-        pprint(old_prog)
-        print(tester.test_all(old_prog))
-        dbg('new program:')
-        pprint(new_prog)
-        print(tester.test_all(new_prog))
+        # dbg('old program:')
+        # pprint(old_prog)
+        # print(tester.test_all(old_prog))
+        # dbg('new program:')
+        # pprint(new_prog)
+        # print(tester.test_all(new_prog))
     return new_prog
 
 def get_union_of_example_progs(tracker, chunk_exs):
@@ -669,15 +667,15 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
         dbg(f'\t skipping as min_literals ({chunk_bounds.min_literals}) >= max_literals ({chunk_bounds,max_literals})')
         return chunk_prog
 
-    # try to reuse an already found hypothesis
-    complete_seen_prog = reuse_seen(tracker, chunk_exs, iteration_progs, chunk_bounds)
-
-    if complete_seen_prog:
-        return complete_seen_prog
-
     bootstap_cons = set()
 
     if WITH_LAZINESS:
+        # try to reuse an already found hypothesis
+        complete_seen_prog = reuse_seen(tracker, chunk_exs, iteration_progs, chunk_bounds)
+        if complete_seen_prog:
+            return complete_seen_prog
+
+    if WITH_BOOTSTRAPPING:
         # find the best program already seen
         seen_prog, bootstap_cons = check_old_programs(tracker, chunk_exs, chunk_bounds)
 
@@ -687,7 +685,6 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
 
             # also update when an improvement is possible
             if chunk_bounds.min_literals >= chunk_bounds.max_literals:
-                print('EARLY SKIPPING')
                 return chunk_prog
 
     dbg(f'min_literals:{chunk_bounds.min_literals} max_literals:{chunk_bounds.max_literals} max_rules:{chunk_bounds.max_rules}')
@@ -703,10 +700,6 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
     assert(tracker.tester.is_complete(chunk_prog, chunk_exs))
     assert(tracker.tester.is_consistent_all(chunk_prog))
     assert(not tracker.tester.check_redundant_clause(chunk_prog))
-
-    # if tracker.tester.is_complete_all(chunk_prog) and tracker.tester.is_complete_all(chunk_prog):
-    #     dbg('SOLUTION FOUND!!! CAN STOP EARLY!!!')
-    #     return chunk_prog
 
     dbg('NEW PROGRAM:')
     pprint(chunk_prog)
@@ -731,18 +724,19 @@ def learn_iteration_prog(tracker, all_chunks, chunk_size):
             tracker.unsolvable.update(chunk_exs)
             continue
 
-        for ex in chunk_exs:
-            tracker.best_progs[ex] = chunk_prog
+        # chunk_prog is guaranteed to be complete, consistent, and smaller than the previous best
 
         assert(tracker.tester.is_complete(chunk_prog, chunk_exs))
         assert(tracker.tester.is_consistent_all(chunk_prog))
 
-        # IF WE FIND A PROGRAM THAT IS COMPLETE AND CONSISTENT FOR ALL EXAMPLES THEN WE CAN STOP
+        # if we find a program that is complete and consistent for all examples then we can stop
         if tracker.tester.is_complete_all(chunk_prog) and tracker.tester.is_consistent_all(chunk_prog):
-            dbg('SOLUTION FOUND!!! CAN STOP EARLY!!!')
+            # dbg('SOLUTION FOUND!!! CAN STOP EARLY!!!')
             return chunk_prog, True
 
-        # chunk_prog is guaranteed to be complete, consistent, and smaller than the previous best
+        for ex in chunk_exs:
+            tracker.best_progs[ex] = chunk_prog
+
         iteration_progs.add(chunk_prog)
 
     iteration_prog = remove_redundancy(tracker.tester, form_union(iteration_progs))
@@ -800,18 +794,16 @@ def dcc(settings):
             if WITH_OPTIMISTIC and tracker.best_prog_errors == 0:
                 break
 
-        # break
         if WITH_CHUNKING:
             all_chunks = perform_chunking(tracker)
 
-        if len(all_chunks) == 1:
+        if len(all_chunks) == 1 or chunk_size > len(tracker.pos):
             break
 
-        # double the chunk size (so the loop runs for at most log(len(pos)) iterations)
-        if chunk_size > len(tracker.pos):
-            break
-
+        # double the chunk size (loop at most log(len(pos)) iterations)
         chunk_size += chunk_size
 
+    print('SOLUTION:')
+    pprint(tracker.best_prog)
     print(tracker.stats.crap_count)
     return tracker.best_prog, tracker.stats
