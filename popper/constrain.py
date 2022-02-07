@@ -43,7 +43,8 @@ class Constrain:
         head = self.make_literal_handle(head)
         body = ','.join(self.make_literal_handle(literal) for literal in body_literals)
         # clause_handle = ''.join(self.make_literal_handle(literal) for literal in [head] + body_literals)
-        clause_handle = f'"{head}:- {body}"'
+        # clause_handle = f'"{head}:- {body}"'
+        clause_handle = f'{head}:- {body}'
         self.seen_clause_handle[clause] = clause_handle
         return clause_handle
 

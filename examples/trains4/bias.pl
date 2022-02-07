@@ -1,5 +1,5 @@
 %% dcc paper
-max_vars(5).
+max_vars(6).
 max_body(6).
 %% max_clauses(4).
 
@@ -23,12 +23,12 @@ body_pred(zero_load,1).
 body_pred(one_load,1).
 body_pred(two_load,1).
 body_pred(three_load,1).
-%% body_pred(circle,1).
+body_pred(circle,1).
 body_pred(triangle,1).
 body_pred(rectangle,1).
 body_pred(diamond,1).
 body_pred(hexagon,1).
-%% body_pred(inverted_triangle,1).
+body_pred(inverted_triangle,1).
 
 type(f,(train,)).
 type(has_car,(train,car)).

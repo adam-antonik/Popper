@@ -66,10 +66,9 @@ class Constraints:
         self.reduce_redundancy()
         self.reduce_handles()
 
-
     def reduce_handles(self):
         needed = set()
-        for _head, body in self.generalisation | self.specialisation | self.redundancy | self.subsumption:
+        for _head, body in self.generalisation | self.specialisation | self.redundancy | self.subsumption | self.elimination:
             needed.update(get_rule_ids(body))
 
         asda = set()
@@ -123,20 +122,21 @@ class Constraints:
             _head, body = rule
             t2 = get_rule_ids(body)
 
-            should_add = True
+            # should_add = True
+            subset = self.reduce_cons(subset, t2)
 
-            for t1 in subset:
-                # if tracker.tester.subsumes2(t2, t1):
-                if tmp_subsumes(t2, t1):
-                    subset.remove(t1)
-                    break
-                elif tmp_subsumes(t1, t2):
-                # elif tracker.tester.subsumes2(t1, t2):
-                    should_add = False
-                    break
+            # for t1 in subset:
+            #     # if tracker.tester.subsumes2(t2, t1):
+            #     if tmp_subsumes(t2, t1):
+            #         subset.remove(t1)
+            #         break
+            #     elif tmp_subsumes(t1, t2):
+            #     # elif tracker.tester.subsumes2(t1, t2):
+            #         should_add = False
+            #         break
 
-            if should_add:
-                subset.add(t2)
+            # if should_add:
+            #     subset.add(t2)
 
         asda = set()
         for rule in self.specialisation:
@@ -159,29 +159,52 @@ class Constraints:
                 asda.add(rule)
         self.redundancy = asda
 
+    def reduce_cons(self, xs, k):
+        subsumed = False
+        subsumes = False
+        for x in xs:
+            if tmp_subsumes(x, k):
+                subsumed = True
+                break
+            if not subsumes and tmp_subsumes(k, x):
+                subsumes = True
+
+        if subsumed:
+            return xs
+
+        if not subsumes:
+            return xs | set([k])
+
+        ys = set()
+        for x in xs:
+            if not tmp_subsumes(k, x):
+                ys.add(x)
+
+        return ys | set([k])
+
     def reduce_with_elims(self, constrainer):
+        # get all gen ids
         gens = set()
         for rule in self.generalisation:
             _head, body = rule
             gens.add(get_rule_ids(body))
 
+        # get all spec ids
         specs = set()
         for rule in self.specialisation:
             _head, body = rule
             specs.add(get_rule_ids(body))
 
+        # default elim ids are the redundancy ids
         elim_ids = set()
         elims = set()
-
         for rule in self.redundancy:
             head, body = rule
             elim_ids.add(get_rule_ids(body))
             elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
 
         gen_and_spec = gens.intersection(specs)
-        new_gen = set()
-        new_spec = set()
-
+        # if a rule has both a generalisation and a specialisation constraint, then add it to the elims
         for rule in self.generalisation | self.specialisation:
             head, body = rule
             ids = get_rule_ids(body)
@@ -189,23 +212,62 @@ class Constraints:
                 elim_ids.add(ids)
                 elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
 
+        # REDUCE THE ELIMS
+        elims_subset = set()
+        for rule in elims:
+            head, body = rule
+            t2 = get_rule_ids(body)
+            elims_subset = self.reduce_cons(elims_subset, t2)
+            # print('')
+            # print('t2', t2)
+            # should_add = True
+            # for t1 in elims_subset:
+            #     print('t1', t1)
+            #     if tmp_subsumes(t2, t1):
+            #         print('t2 subsumes t1')
+            #         elims_subset.remove(t1)
+            #         break
+            #     elif tmp_subsumes(t1, t2):
+            #         print('t1 subsumes t2')
+            #         should_add = False
+            #         break
+            # if should_add:
+            #     elims_subset.add(t2)
+
+        new_elims = set()
+        for rule in elims:
+            head, body = rule
+            t2 = get_rule_ids(body)
+            if t2 in elims_subset:
+                new_elims.add(rule)
+
+        elims = new_elims
+
+        new_gen = set()
+        new_spec = set()
         for rule in self.generalisation:
             head, body = rule
             ids = get_rule_ids(body)
-            if ids not in elim_ids:
+            # if ids not in elim_ids:
+                # new_gen.add(rule)
+            if not any(tmp_subsumes(other, ids) for other in elims_subset):
                 new_gen.add(rule)
 
         for rule in self.specialisation:
             head, body = rule
             ids = get_rule_ids(body)
-            if ids not in elim_ids:
+            # if ids not in elim_ids:
+                # new_spec.add(rule)
+            if not any(tmp_subsumes(other, ids) for other in elims_subset):
                 new_spec.add(rule)
 
         new_sub = set()
         for rule in self.subsumption:
             head, body = rule
             ids = get_rule_ids(body)
-            if ids not in elim_ids:
+            # if ids not in elim_ids:
+                # new_sub.add(rule)
+            if not any(tmp_subsumes(other, ids) for other in elims_subset):
                 new_sub.add(rule)
 
         # k = len(self.generalisation) + len(self.specialisation) + len(self.redundancy)
@@ -291,6 +353,7 @@ def get_rule_ids(body):
         if lit.predicate != 'included_clause':
             continue
         sym = lit.arguments[0]
+        # sym = sym[1:-1]
         xs = sym.split(':-')
         b = xs[1]
         ids.add(frozenset(x.strip().replace('.',',') for x in b.split(',')))
@@ -304,6 +367,7 @@ def get_handles(body):
         if lit.predicate != 'included_clause':
             continue
         sym = lit.arguments[0]
+        # sym = sym[1:-1]
         # xs = sym.split(':-')
         # b = xs[1]
         ids.add(sym)
@@ -401,6 +465,9 @@ def print_stats(cons, stats, grounder):
 
 def save_cons(cons, name):
     with open(f'{name}.pl', 'w') as f:
+        f.write('%chandles\n')
+        for rule in cons.handles:
+            f.write(Constrain.format_rule_clingo(rule) + '\n')
         f.write('%generalisations\n')
         for rule in cons.generalisation:
             f.write(Constrain.format_rule_clingo(rule) + '\n')
@@ -438,13 +505,15 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
 
     # FILTER OLD CONSTRAINTS
     with tracker.stats.duration('filtering'):
-        save_cons(bootstap_cons, 'cons0')
+        save_cons(bootstap_cons, 'cons-all')
         bootstap_cons.reduce()
         # TMP!!!
-        save_cons(bootstap_cons, 'cons1')
+        save_cons(bootstap_cons, 'cons-simple-filter')
         if not settings.recursion:
             bootstap_cons.reduce_with_elims(constrainer)
-            save_cons(bootstap_cons, 'cons2')
+            save_cons(bootstap_cons, 'cons-elims')
+            bootstap_cons.reduce_handles()
+            save_cons(bootstap_cons, 'cons-elims-handles')
 
 
     all_fo_cons = bootstap_cons.all()
