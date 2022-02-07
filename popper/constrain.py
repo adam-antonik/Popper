@@ -43,7 +43,7 @@ class Constrain:
         head = self.make_literal_handle(head)
         body = ','.join(self.make_literal_handle(literal) for literal in body_literals)
         # clause_handle = ''.join(self.make_literal_handle(literal) for literal in [head] + body_literals)
-        clause_handle = f'{head}:- {body}'
+        clause_handle = f'"{head}:- {body}"'
         self.seen_clause_handle[clause] = clause_handle
         return clause_handle
 
@@ -67,7 +67,7 @@ class Constrain:
         # literals.append(gteq(clause_number, min_num))
 
         # ensure that each var_var is ground to a unique value
-        literals.append(alldiff(tuple(vo_variable(v) for v in Clause.all_vars(clause))))
+        # literals.append(alldiff(tuple(vo_variable(v) for v in Clause.all_vars(clause))))
 
         for idx, var in enumerate(head.arguments):
             literals.append(eq(vo_variable(var), idx))
@@ -125,8 +125,36 @@ class Constrain:
 
         yield (None, tuple(literals))
 
+    def tmp_elimination_constraint(self, handles):
+        literals = []
+        for clause_number, handle in enumerate(handles):
+            literals.append(Literal('included_clause', (handle, vo_clause(clause_number))))
+            # literals.append(body_size_literal(vo_clause(clause_number), len(body)))
+
+        # for clause_id1, clause_numbers in before.items():
+        #     for clause_id2 in clause_numbers:
+        #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
+
+        # for clause_number, clause in enumerate(program):
+        #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+
+        # num_clauses =
+        # ensure that each clause_var is ground to a unique value
+        # literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+        # literals.append(Literal('clause', (num_clauses, ), positive = False))
+
+        # for x in literals:
+        # print(':- ' + ','.join(str(x) for x in literals))
+
+        yield (None, tuple(literals))
+
     # def generalisation_constraint(self, program, before = {}, min_clause = defaultdict(lambda: 0)):
     def generalisation_constraint(self, program):
+
+        # if a program is too general (entails a negative example) then rule out any generalisations
+        # :- included_clause("next_value(A.B):- c1(B),c2(C),true_value(A.C)",C0),body_size(C0,3).
+        # :- included_clause("next_value(A.B):- c1(B),c1(C),my_succ(D.C),true_value(A.D)",C0),body_size(C0,4).
+
         literals = []
         for clause_number, clause in enumerate(program):
             (_head, body) = clause
@@ -145,12 +173,19 @@ class Constrain:
         #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
 
         # ensure that each clause_var is ground to a unique value
-        literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+        if len(program) > 1:
+            literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
 
         yield (None, tuple(literals))
 
     # def specialisation_constraint(self, program, before = {}, min_clause = defaultdict(lambda: 0)):
     def specialisation_constraint(self, program):
+        # IF TOO SPECIFIC (DOES NOT ENTAIL ALL POSITIVE) THEN RULE OUT SPECIALISATIONS
+        #  :- included_clause("next_value(A.B):- c1(B),c1(C),my_succ(D.C),true_value(A.D)",C0),not clause(1).
+        #  :- included_clause("next_value(A.B):- c1(B),c1(C),true_value(A.C)",C0),not clause(1).
+        #  :- included_clause("next_value(A.B):- c1(B),c2(C),my_succ(D.C),true_value(A.D)",C0),not clause(1).
+        #  :- included_clause("next_value(A.B):- c1(B),c2(C),true_value(A.C)",C0),not clause(1).
+
         literals = []
 
         for clause_number, clause in enumerate(program):
@@ -166,7 +201,8 @@ class Constrain:
 
         num_clauses = len(program)
         # ensure that each clause_var is ground to a unique value
-        literals.append(alldiff(tuple(vo_clause(c) for c in range(num_clauses))))
+        if num_clauses > 1:
+            literals.append(alldiff(tuple(vo_clause(c) for c in range(num_clauses))))
         literals.append(Literal('clause', (num_clauses, ), positive = False))
 
         yield (None, tuple(literals))
@@ -226,6 +262,9 @@ class Constrain:
     # AC: @JK, I made another pass through it. It was tough. I will try again once we have the whole codebase tidied.
     # def redundancy_constraint(self, program, before = {}, min_clause = defaultdict(lambda: 0)):
     def redundancy_constraint(self, program):
+        #  :- included_clause("next_value(A.B):- c1(B),c2(C),my_succ(D.C),true_value(A.D)",C0),num_recursive(next_value,0).
+        #  :- included_clause("next_value(A.B):- c1(B),c1(C),true_value(A.C)",C0),num_recursive(next_value,0).
+
         lits_num_clauses = defaultdict(int)
         lits_num_recursive_clauses = defaultdict(int)
         for clause in program:
@@ -264,7 +303,8 @@ class Constrain:
             #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
 
             # ensure that each clause_var is ground to a unique value
-            literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+            if len(program) > 1:
+                literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
 
             for other_lit, num_clauses in lits_num_clauses.items():
                 if other_lit == lit:
@@ -302,3 +342,34 @@ class Constrain:
         if head:
             x = f'{head} {x}'
         return x
+
+
+
+    @staticmethod
+    def format_rule_clingo(rule):
+        head, body = rule
+        constraint_literals = []
+        # body = ','.join(str(x) for x in body)
+        new_body = []
+        if head == None:
+            head = ''
+        # print(str(head) + ':- ' + body)
+        for literal in body:
+            if not literal.meta:
+                new_body.append(str(literal))
+                continue
+            arga, argb = literal.arguments
+            if literal.predicate == 'AllDifferent':
+                new_body.append(f'{arga.name} != {argb.name}')
+                continue
+            if isinstance(arga, ConstVar):
+                arga = arga.name
+            else:
+                arga = str(arga)
+            if isinstance(argb, ConstVar):
+                argb = argb.name
+            else:
+                argb = str(argb)
+            new_body.append(f'{arga}{literal.predicate}{argb}')
+        # if head:
+        return str(head) + ' :- ' + ','.join(new_body) + '.'
