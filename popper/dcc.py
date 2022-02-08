@@ -15,7 +15,7 @@ WITH_OPTIMISTIC = False
 WITH_CHUNKING = True
 WITH_LAZINESS = True
 WITH_MIN_LITERALS = False
-# WITH_MIN_LITERALS = True
+WITH_MIN_LITERALS = True
 WITH_MIN_RULE_SIZE = False
 # WITH_MIN_RULE_SIZE = True
 WITH_MAX_RULE_BOUND = False
@@ -60,206 +60,206 @@ class Constraints:
     def all(self):
         return self.handles | self.generalisation | self.specialisation | self.redundancy | self.subsumption | self.elimination
 
-    def reduce(self):
-        self.reduce_generalisation()
-        self.reduce_specialisation()
-        self.reduce_redundancy()
-        self.reduce_handles()
+    # def reduce(self):
+    #     self.reduce_generalisation()
+    #     self.reduce_specialisation()
+    #     self.reduce_redundancy()
+    #     self.reduce_handles()
 
-    def reduce_handles(self):
-        needed = set()
-        for _head, body in self.generalisation | self.specialisation | self.redundancy | self.subsumption | self.elimination:
-            needed.update(get_rule_ids(body))
+    # def reduce_handles(self):
+    #     needed = set()
+    #     for _head, body in self.generalisation | self.specialisation | self.redundancy | self.subsumption | self.elimination:
+    #         needed.update(get_rule_ids(body))
 
-        asda = set()
-        for rule in self.handles:
-            head, _body = rule
-            sym = head.arguments[0]
-            xs = sym.split(':-')
-            b = xs[1]
-            k = frozenset(x.strip().replace('.',',') for x in b.split(','))
-            if k in needed:
-                asda.add(rule)
-        self.handles = asda
+    #     asda = set()
+    #     for rule in self.handles:
+    #         head, _body = rule
+    #         sym = head.arguments[0]
+    #         xs = sym.split(':-')
+    #         b = xs[1]
+    #         k = frozenset(x.strip().replace('.',',') for x in b.split(','))
+    #         if k in needed:
+    #             asda.add(rule)
+    #     self.handles = asda
 
-    def reduce_gens(self, xs, k):
-        # xs is a set of sets of rule handles
-        # k is a set of rule handles we want to compare against
-        subsumed = False
-        subsumes = False
-        for x in xs:
-            if x.issubset(k):
-                subsumed = True
-                break
-            if not subsumes and k.issubset(x):
-                subsumes = True
-        if subsumed:
-            return xs
+    # def reduce_gens(self, xs, k):
+    #     # xs is a set of sets of rule handles
+    #     # k is a set of rule handles we want to compare against
+    #     subsumed = False
+    #     subsumes = False
+    #     for x in xs:
+    #         if x.issubset(k):
+    #             subsumed = True
+    #             break
+    #         if not subsumes and k.issubset(x):
+    #             subsumes = True
+    #     if subsumed:
+    #         return xs
 
-        if not subsumes:
-            return xs | set([k])
+    #     if not subsumes:
+    #         return xs | set([k])
 
-        ys = set()
-        for x in xs:
-            if not t1.issubset(k, x):
-                ys.add(x)
+    #     ys = set()
+    #     for x in xs:
+    #         if not k.issubset(x):
+    #             ys.add(x)
 
-        return ys | set([k])
+    #     return ys | set([k])
 
-    def subset_filter(self, subset, rules):
-        out = set()
-        for rule in rules:
-            head, body = rule
-            k = get_rule_ids(body)
-            if k in subset:
-                out.add(rule)
-        return out
+    # def subset_filter(self, subset, rules):
+    #     out = set()
+    #     for rule in rules:
+    #         head, body = rule
+    #         k = get_rule_ids(body)
+    #         if k in subset:
+    #             out.add(rule)
+    #     return out
 
-    def reduce_generalisation(self):
-        # SUPPOSE WE HAVE TWO GENERALISATION CONSTRAINTS FOR THE RULES
-        # H1 = H :- A
-        # H2 = {H :- A.; H - B}
-        # WE NEED ONLY THE CONSTRAINT FOR H1
+    # def reduce_generalisation(self):
+    #     # SUPPOSE WE HAVE TWO GENERALISATION CONSTRAINTS FOR THE RULES
+    #     # H1 = H :- A
+    #     # H2 = {H :- A.; H - B}
+    #     # WE NEED ONLY THE CONSTRAINT FOR H1
 
-        subset = set()
-        for rule in self.generalisation:
-            head, body = rule
-            t2 = get_rule_ids(body)
-            should_add = True
-            subset = self.reduce_gens(subset, t2)
+    #     subset = set()
+    #     for rule in self.generalisation:
+    #         head, body = rule
+    #         t2 = get_rule_ids(body)
+    #         should_add = True
+    #         subset = self.reduce_gens(subset, t2)
 
-        self.generalisation = self.subset_filter(subset, self.generalisation)
+    #     self.generalisation = self.subset_filter(subset, self.generalisation)
 
-    def reduce_specialisation(self):
-        # SUPPOSE WE HAVE TWO SPECIALISATION CONSTRAINTS FOR THE RULES
-        # R1 = H :- A
-        # R2 = H :- A, B
-        # WE NEED ONLY THE CONSTRAINT FOR R1
-        subset = set()
-        for rule in self.specialisation:
-            _head, body = rule
-            t2 = get_rule_ids(body)
-            subset = self.reduce_cons(subset, t2)
+    # def reduce_specialisation(self):
+    #     # SUPPOSE WE HAVE TWO SPECIALISATION CONSTRAINTS FOR THE RULES
+    #     # R1 = H :- A
+    #     # R2 = H :- A, B
+    #     # WE NEED ONLY THE CONSTRAINT FOR R1
+    #     subset = set()
+    #     for rule in self.specialisation:
+    #         _head, body = rule
+    #         t2 = get_rule_ids(body)
+    #         subset = self.reduce_cons(subset, t2)
 
-        self.specialisation = self.subset_filter(subset, self.specialisation)
+    #     self.specialisation = self.subset_filter(subset, self.specialisation)
 
-    def reduce_redundancy(self):
-        gens = set()
-        for rule in self.generalisation:
-            _head, body = rule
-            gens.add(get_rule_ids(body))
+    # def reduce_redundancy(self):
+    #     gens = set()
+    #     for rule in self.generalisation:
+    #         _head, body = rule
+    #         gens.add(get_rule_ids(body))
 
-        asda = set()
-        for rule in self.redundancy:
-            _head, body = rule
-            if get_rule_ids(body) not in gens:
-                asda.add(rule)
-        self.redundancy = asda
+    #     asda = set()
+    #     for rule in self.redundancy:
+    #         _head, body = rule
+    #         if get_rule_ids(body) not in gens:
+    #             asda.add(rule)
+    #     self.redundancy = asda
 
-    def reduce_cons(self, xs, k):
-        subsumed = False
-        subsumes = False
-        for x in xs:
-            if tmp_subsumes(x, k):
-                subsumed = True
-                break
-            if not subsumes and tmp_subsumes(k, x):
-                subsumes = True
+    # def reduce_cons(self, xs, k):
+    #     subsumed = False
+    #     subsumes = False
+    #     for x in xs:
+    #         if tmp_subsumes(x, k):
+    #             subsumed = True
+    #             break
+    #         if not subsumes and tmp_subsumes(k, x):
+    #             subsumes = True
 
-        if subsumed:
-            return xs
+    #     if subsumed:
+    #         return xs
 
-        if not subsumes:
-            return xs | set([k])
+    #     if not subsumes:
+    #         return xs | set([k])
 
-        ys = set()
-        for x in xs:
-            if not tmp_subsumes(k, x):
-                ys.add(x)
+    #     ys = set()
+    #     for x in xs:
+    #         if not tmp_subsumes(k, x):
+    #             ys.add(x)
 
-        return ys | set([k])
+    #     return ys | set([k])
 
-    def reduce_with_elims(self, constrainer):
-        # get all gen ids
-        # gens = set()
-        # for rule in self.generalisation:
-        #     _head, body = rule
-        #     gens.add(get_rule_ids(body))
+    # def reduce_with_elims(self, constrainer):
+    #     # get all gen ids
+    #     # gens = set()
+    #     # for rule in self.generalisation:
+    #     #     _head, body = rule
+    #     #     gens.add(get_rule_ids(body))
 
-        # # get all spec ids
-        # specs = set()
-        # for rule in self.specialisation:
-        #     _head, body = rule
-        #     specs.add(get_rule_ids(body))
+    #     # # get all spec ids
+    #     # specs = set()
+    #     # for rule in self.specialisation:
+    #     #     _head, body = rule
+    #     #     specs.add(get_rule_ids(body))
 
-        # default elim ids are the redundancy ids
-        elim_ids = set()
-        elims = set()
-        for rule in self.redundancy | self.elimination:
-            head, body = rule
-            elim_ids.add(get_rule_ids(body))
-            elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
+    #     # default elim ids are the redundancy ids
+    #     elim_ids = set()
+    #     elims = set()
+    #     for rule in self.redundancy | self.elimination:
+    #         head, body = rule
+    #         elim_ids.add(get_rule_ids(body))
+    #         elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
 
-        # gen_and_spec = gens.intersection(specs)
-        # # if a rule has both a generalisation and a specialisation constraint, then add it to the elims
-        # for rule in self.generalisation | self.specialisation:
-        #     head, body = rule
-        #     ids = get_rule_ids(body)
-        #     if ids in gen_and_spec:
-        #         elim_ids.add(ids)
-        #         elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
+    #     # gen_and_spec = gens.intersection(specs)
+    #     # # if a rule has both a generalisation and a specialisation constraint, then add it to the elims
+    #     # for rule in self.generalisation | self.specialisation:
+    #     #     head, body = rule
+    #     #     ids = get_rule_ids(body)
+    #     #     if ids in gen_and_spec:
+    #     #         elim_ids.add(ids)
+    #     #         elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
 
-        # REDUCE THE ELIMS
-        elims_subset = set()
-        for rule in elims:
-            head, body = rule
-            t2 = get_rule_ids(body)
-            elims_subset = self.reduce_cons(elims_subset, t2)
+    #     # REDUCE THE ELIMS
+    #     elims_subset = set()
+    #     for rule in elims:
+    #         head, body = rule
+    #         t2 = get_rule_ids(body)
+    #         elims_subset = self.reduce_cons(elims_subset, t2)
 
-        self.elims = self.subset_filter(elims_subset, elims)
+    #     self.elims = self.subset_filter(elims_subset, elims)
 
-        new_gen = set()
-        for rule in self.generalisation:
-            head, body = rule
-            ids = get_rule_ids(body)
-            if not any(tmp_subsumes(other, ids) for other in elims_subset):
-                new_gen.add(rule)
+    #     new_gen = set()
+    #     for rule in self.generalisation:
+    #         head, body = rule
+    #         ids = get_rule_ids(body)
+    #         if not any(tmp_subsumes(other, ids) for other in elims_subset):
+    #             new_gen.add(rule)
 
-        new_spec = set()
-        for rule in self.specialisation:
-            head, body = rule
-            ids = get_rule_ids(body)
-            if not any(tmp_subsumes(other, ids) for other in elims_subset):
-                new_spec.add(rule)
+    #     new_spec = set()
+    #     for rule in self.specialisation:
+    #         head, body = rule
+    #         ids = get_rule_ids(body)
+    #         if not any(tmp_subsumes(other, ids) for other in elims_subset):
+    #             new_spec.add(rule)
 
-        new_sub = set()
-        for rule in self.subsumption:
-            head, body = rule
-            ids = get_rule_ids(body)
-            if not any(tmp_subsumes(other, ids) for other in elims_subset):
-                new_sub.add(rule)
+    #     new_sub = set()
+    #     for rule in self.subsumption:
+    #         head, body = rule
+    #         ids = get_rule_ids(body)
+    #         if not any(tmp_subsumes(other, ids) for other in elims_subset):
+    #             new_sub.add(rule)
 
-        # k = len(self.generalisation) + len(self.specialisation) + len(self.redundancy)
-        # print(f'gens old:{len(self.generalisation)} new:{len(new_gen)}')
-        # print(f'spec old:{len(self.specialisation)} new:{len(new_spec)}')
-        # print(f'sub old:{len(self.subsumption)} new:{len(new_sub)}')
-        # print(f'red old:{len(self.redundancy)}')
-        # print(f'total old:{k} new:{len(elims)}')
+    #     # k = len(self.generalisation) + len(self.specialisation) + len(self.redundancy)
+    #     # print(f'gens old:{len(self.generalisation)} new:{len(new_gen)}')
+    #     # print(f'spec old:{len(self.specialisation)} new:{len(new_spec)}')
+    #     # print(f'sub old:{len(self.subsumption)} new:{len(new_sub)}')
+    #     # print(f'red old:{len(self.redundancy)}')
+    #     # print(f'total old:{k} new:{len(elims)}')
 
-        # TODO: REDUCE FURTHER!!!!
+    #     # TODO: REDUCE FURTHER!!!!
 
-        # :- included_clause("f(A):- has_car(A.C),has_car(A.B),roof_flat(B),short(C)",C0).
-        # :- included_clause("f(A):- has_car(A.C),has_car(A.B),roof_flat(B),short(C),two_wheels(B)",C0),body_size(C0,5).
-        # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C)",C0).
-        # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C),roof_flat(C)",C0).
-        # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C),roof_open(B)",C0).
-        # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C),three_wheels(B)",C0),body_size(C0,5).
+    #     # :- included_clause("f(A):- has_car(A.C),has_car(A.B),roof_flat(B),short(C)",C0).
+    #     # :- included_clause("f(A):- has_car(A.C),has_car(A.B),roof_flat(B),short(C),two_wheels(B)",C0),body_size(C0,5).
+    #     # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C)",C0).
+    #     # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C),roof_flat(C)",C0).
+    #     # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C),roof_open(B)",C0).
+    #     # :- included_clause("f(A):- has_car(A.B),has_car(A.C),long(B),long(C),three_wheels(B)",C0),body_size(C0,5).
 
-        self.generalisation = new_gen
-        self.specialisation = new_spec
-        self.redundancy = set()
-        self.subsumption = new_sub
-        self.elimination = elims
+    #     self.generalisation = new_gen
+    #     self.specialisation = new_spec
+    #     self.redundancy = set()
+    #     self.subsumption = new_sub
+    #     self.elimination = elims
 
 class Tracker:
     def __init__(self, settings):
@@ -431,41 +431,41 @@ def cache_rules(tracker, program):
         for rule in program:
             cache_rules(tracker, frozenset([rule]))
 
-def print_stats(cons, stats, grounder):
-    print(f'ALL:\t{len(cons.all())}')
-    print(f'INCS:\t{len(cons.handles)}')
-    print(f'GENS:\t{len(cons.generalisation)}')
-    print(f'SPEC:\t{len(cons.specialisation)}')
-    print(f'SUBS:\t{len(cons.subsumption)}')
-    print(f'REDU:\t{len(cons.redundancy)}')
-    ground_cons = bind_vars_in_cons(stats, grounder, cons.all())
-    print(f'GROUND:\t{len(ground_cons)}')
-    print(f'GROUND_INCS:\t{len(bind_vars_in_cons(stats, grounder, cons.handles))}')
-    print(f'GROUND_GENS:\t{len(bind_vars_in_cons(stats, grounder, cons.generalisation))}')
-    print(f'GROUND_SPEC:\t{len(bind_vars_in_cons(stats, grounder, cons.specialisation))}')
-    print(f'GROUND_SUBS:\t{len(bind_vars_in_cons(stats, grounder, cons.subsumption))}')
-    print(f'GROUND_REDU:\t{len(bind_vars_in_cons(stats, grounder, cons.redundancy))}')
+# def print_stats(cons, stats, grounder):
+#     print(f'ALL:\t{len(cons.all())}')
+#     print(f'INCS:\t{len(cons.handles)}')
+#     print(f'GENS:\t{len(cons.generalisation)}')
+#     print(f'SPEC:\t{len(cons.specialisation)}')
+#     print(f'SUBS:\t{len(cons.subsumption)}')
+#     print(f'REDU:\t{len(cons.redundancy)}')
+#     ground_cons = bind_vars_in_cons(stats, grounder, cons.all())
+#     print(f'GROUND:\t{len(ground_cons)}')
+#     print(f'GROUND_INCS:\t{len(bind_vars_in_cons(stats, grounder, cons.handles))}')
+#     print(f'GROUND_GENS:\t{len(bind_vars_in_cons(stats, grounder, cons.generalisation))}')
+#     print(f'GROUND_SPEC:\t{len(bind_vars_in_cons(stats, grounder, cons.specialisation))}')
+#     print(f'GROUND_SUBS:\t{len(bind_vars_in_cons(stats, grounder, cons.subsumption))}')
+#     print(f'GROUND_REDU:\t{len(bind_vars_in_cons(stats, grounder, cons.redundancy))}')
 
-def save_cons(cons, name):
-    with open(f'{name}.pl', 'w') as f:
-        f.write('%chandles\n')
-        for rule in cons.handles:
-            f.write(Constrain.format_rule_clingo(rule) + '\n')
-        f.write('%generalisations\n')
-        for rule in cons.generalisation:
-            f.write(Constrain.format_rule_clingo(rule) + '\n')
-        f.write('%specialisation\n')
-        for rule in cons.specialisation:
-            f.write(Constrain.format_rule_clingo(rule) + '\n')
-        f.write('%redundancy\n')
-        for rule in cons.redundancy:
-            f.write(Constrain.format_rule_clingo(rule) + '\n')
-        f.write('%subs\n')
-        for rule in cons.subsumption:
-            f.write(Constrain.format_rule_clingo(rule) + '\n')
-        f.write('%elimination\n')
-        for rule in cons.elimination:
-            f.write(Constrain.format_rule_clingo(rule) + '\n')
+# def save_cons(cons, name):
+#     with open(f'{name}.pl', 'w') as f:
+#         f.write('%chandles\n')
+#         for rule in cons.handles:
+#             f.write(Constrain.format_rule_clingo(rule) + '\n')
+#         f.write('%generalisations\n')
+#         for rule in cons.generalisation:
+#             f.write(Constrain.format_rule_clingo(rule) + '\n')
+#         f.write('%specialisation\n')
+#         for rule in cons.specialisation:
+#             f.write(Constrain.format_rule_clingo(rule) + '\n')
+#         f.write('%redundancy\n')
+#         for rule in cons.redundancy:
+#             f.write(Constrain.format_rule_clingo(rule) + '\n')
+#         f.write('%subs\n')
+#         for rule in cons.subsumption:
+#             f.write(Constrain.format_rule_clingo(rule) + '\n')
+#         f.write('%elimination\n')
+#         for rule in cons.elimination:
+#             f.write(Constrain.format_rule_clingo(rule) + '\n')
 
     # with open(f'{name}.pl', 'w') as f:
     #     for rule in cons.generalisation | cons.specialisation | cons.elimination:
@@ -475,6 +475,12 @@ def save_cons(cons, name):
         # f.write(rule + '.\n')
 
 def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
+
+    # import pickle
+
+    # with open('cons.pickle', 'w') as f:
+    #     pickle.dump(bootstap_cons, f)
+
     settings = tracker.settings
     stats = tracker.stats
     tester = tracker.tester
@@ -486,22 +492,24 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
 
     dbg('POS:', chunk_bounds.max_literals, chunk_bounds.max_rules)
 
-    # FILTER OLD CONSTRAINTS
-    with tracker.stats.duration('filtering'):
-        save_cons(bootstap_cons, 'cons-all')
-        bootstap_cons.reduce()
-        # TMP!!!
-        save_cons(bootstap_cons, 'cons-filter')
-        if not settings.recursion:
-            bootstap_cons.reduce_with_elims(constrainer)
-            bootstap_cons.reduce_handles()
-            save_cons(bootstap_cons, 'cons-elims')
+    # # FILTER OLD CONSTRAINTS
+    # THE OVERHEAD IS FAR TOO HIGH AND INCREASES LEARNING TIME!
+    # with tracker.stats.duration('filtering'):
+    #     save_cons(bootstap_cons, 'cons-all')
+    #     bootstap_cons.reduce()
+    #     # TMP!!!
+    #     save_cons(bootstap_cons, 'cons-filter')
+    #     if not settings.recursion:
+    #         bootstap_cons.reduce_with_elims(constrainer)
+    #         bootstap_cons.reduce_handles()
+    #         save_cons(bootstap_cons, 'cons-elims')
 
     all_fo_cons = bootstap_cons.all()
 
     # GROUND OLD CONSTRAINTS AND ADD TO SOLVER
-    with stats.duration('bootstrap'):
+    with stats.duration('bootstrap_ground'):
         ground_cons = bind_vars_in_cons(stats, grounder, all_fo_cons)
+    with stats.duration('bootstrap_add'):
         solver.add_ground_clauses(ground_cons)
 
     min_size = chunk_bounds.min_literals if WITH_MIN_LITERALS else 1
