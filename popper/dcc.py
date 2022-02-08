@@ -39,7 +39,7 @@ class Bounds:
 
 class Constraints:
 
-    def __init__(self, tracker, generalisation, specialisation, redundancy, subsumption):
+    def __init__(self, tracker, generalisation, specialisation, redundancy, subsumption, elimination):
         self.tracker = tracker
         self.handles = set()
 
@@ -55,7 +55,7 @@ class Constraints:
         self.specialisation = set(filter_rules(specialisation))
         self.redundancy = set(filter_rules(redundancy))
         self.subsumption = set(filter_rules(subsumption))
-        self.elimination = set()
+        self.elimination = set(filter_rules(elimination))
 
     def all(self):
         return self.handles | self.generalisation | self.specialisation | self.redundancy | self.subsumption | self.elimination
@@ -82,6 +82,39 @@ class Constraints:
                 asda.add(rule)
         self.handles = asda
 
+    def reduce_gens(self, xs, k):
+        # xs is a set of sets of rule handles
+        # k is a set of rule handles we want to compare against
+        subsumed = False
+        subsumes = False
+        for x in xs:
+            if x.issubset(k):
+                subsumed = True
+                break
+            if not subsumes and k.issubset(x):
+                subsumes = True
+        if subsumed:
+            return xs
+
+        if not subsumes:
+            return xs | set([k])
+
+        ys = set()
+        for x in xs:
+            if not t1.issubset(k, x):
+                ys.add(x)
+
+        return ys | set([k])
+
+    def subset_filter(self, subset, rules):
+        out = set()
+        for rule in rules:
+            head, body = rule
+            k = get_rule_ids(body)
+            if k in subset:
+                out.add(rule)
+        return out
+
     def reduce_generalisation(self):
         # SUPPOSE WE HAVE TWO GENERALISATION CONSTRAINTS FOR THE RULES
         # H1 = H :- A
@@ -93,24 +126,9 @@ class Constraints:
             head, body = rule
             t2 = get_rule_ids(body)
             should_add = True
+            subset = self.reduce_gens(subset, t2)
 
-            for t1 in subset:
-                if t1.issubset(t2):
-                    should_add = False
-                    break
-                elif t2.issubset(t1):
-                    subset.remove(t1)
-                    break
-            if should_add:
-                subset.add(t2)
-
-        asda = set()
-        for rule in self.generalisation:
-            head, body = rule
-            t2 = get_rule_ids(body)
-            if t2 in subset:
-                asda.add(rule)
-        self.generalisation = asda
+        self.generalisation = self.subset_filter(subset, self.generalisation)
 
     def reduce_specialisation(self):
         # SUPPOSE WE HAVE TWO SPECIALISATION CONSTRAINTS FOR THE RULES
@@ -121,30 +139,9 @@ class Constraints:
         for rule in self.specialisation:
             _head, body = rule
             t2 = get_rule_ids(body)
-
-            # should_add = True
             subset = self.reduce_cons(subset, t2)
 
-            # for t1 in subset:
-            #     # if tracker.tester.subsumes2(t2, t1):
-            #     if tmp_subsumes(t2, t1):
-            #         subset.remove(t1)
-            #         break
-            #     elif tmp_subsumes(t1, t2):
-            #     # elif tracker.tester.subsumes2(t1, t2):
-            #         should_add = False
-            #         break
-
-            # if should_add:
-            #     subset.add(t2)
-
-        asda = set()
-        for rule in self.specialisation:
-            _head, body = rule
-            t2 = get_rule_ids(body)
-            if t2 in subset:
-                asda.add(rule)
-        self.specialisation = asda
+        self.specialisation = self.subset_filter(subset, self.specialisation)
 
     def reduce_redundancy(self):
         gens = set()
@@ -184,33 +181,33 @@ class Constraints:
 
     def reduce_with_elims(self, constrainer):
         # get all gen ids
-        gens = set()
-        for rule in self.generalisation:
-            _head, body = rule
-            gens.add(get_rule_ids(body))
+        # gens = set()
+        # for rule in self.generalisation:
+        #     _head, body = rule
+        #     gens.add(get_rule_ids(body))
 
-        # get all spec ids
-        specs = set()
-        for rule in self.specialisation:
-            _head, body = rule
-            specs.add(get_rule_ids(body))
+        # # get all spec ids
+        # specs = set()
+        # for rule in self.specialisation:
+        #     _head, body = rule
+        #     specs.add(get_rule_ids(body))
 
         # default elim ids are the redundancy ids
         elim_ids = set()
         elims = set()
-        for rule in self.redundancy:
+        for rule in self.redundancy | self.elimination:
             head, body = rule
             elim_ids.add(get_rule_ids(body))
             elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
 
-        gen_and_spec = gens.intersection(specs)
-        # if a rule has both a generalisation and a specialisation constraint, then add it to the elims
-        for rule in self.generalisation | self.specialisation:
-            head, body = rule
-            ids = get_rule_ids(body)
-            if ids in gen_and_spec:
-                elim_ids.add(ids)
-                elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
+        # gen_and_spec = gens.intersection(specs)
+        # # if a rule has both a generalisation and a specialisation constraint, then add it to the elims
+        # for rule in self.generalisation | self.specialisation:
+        #     head, body = rule
+        #     ids = get_rule_ids(body)
+        #     if ids in gen_and_spec:
+        #         elim_ids.add(ids)
+        #         elims.update(constrainer.tmp_elimination_constraint(get_handles(body)))
 
         # REDUCE THE ELIMS
         elims_subset = set()
@@ -218,46 +215,20 @@ class Constraints:
             head, body = rule
             t2 = get_rule_ids(body)
             elims_subset = self.reduce_cons(elims_subset, t2)
-            # print('')
-            # print('t2', t2)
-            # should_add = True
-            # for t1 in elims_subset:
-            #     print('t1', t1)
-            #     if tmp_subsumes(t2, t1):
-            #         print('t2 subsumes t1')
-            #         elims_subset.remove(t1)
-            #         break
-            #     elif tmp_subsumes(t1, t2):
-            #         print('t1 subsumes t2')
-            #         should_add = False
-            #         break
-            # if should_add:
-            #     elims_subset.add(t2)
 
-        new_elims = set()
-        for rule in elims:
-            head, body = rule
-            t2 = get_rule_ids(body)
-            if t2 in elims_subset:
-                new_elims.add(rule)
-
-        elims = new_elims
+        self.elims = self.subset_filter(elims_subset, elims)
 
         new_gen = set()
-        new_spec = set()
         for rule in self.generalisation:
             head, body = rule
             ids = get_rule_ids(body)
-            # if ids not in elim_ids:
-                # new_gen.add(rule)
             if not any(tmp_subsumes(other, ids) for other in elims_subset):
                 new_gen.add(rule)
 
+        new_spec = set()
         for rule in self.specialisation:
             head, body = rule
             ids = get_rule_ids(body)
-            # if ids not in elim_ids:
-                # new_spec.add(rule)
             if not any(tmp_subsumes(other, ids) for other in elims_subset):
                 new_spec.add(rule)
 
@@ -265,8 +236,6 @@ class Constraints:
         for rule in self.subsumption:
             head, body = rule
             ids = get_rule_ids(body)
-            # if ids not in elim_ids:
-                # new_sub.add(rule)
             if not any(tmp_subsumes(other, ids) for other in elims_subset):
                 new_sub.add(rule)
 
@@ -508,12 +477,11 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
         save_cons(bootstap_cons, 'cons-all')
         bootstap_cons.reduce()
         # TMP!!!
-        save_cons(bootstap_cons, 'cons-simple-filter')
+        save_cons(bootstap_cons, 'cons-filter')
         if not settings.recursion:
             bootstap_cons.reduce_with_elims(constrainer)
-            save_cons(bootstap_cons, 'cons-elims')
             bootstap_cons.reduce_handles()
-            save_cons(bootstap_cons, 'cons-elims-handles')
+            save_cons(bootstap_cons, 'cons-elims')
 
 
     all_fo_cons = bootstap_cons.all()
@@ -543,9 +511,9 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
             # GENERATE HYPOTHESIS
             with stats.duration('generate'):
                 model = solver.get_model()
-                if not model:
-                    break
-                program = generate_program(model)
+            if not model:
+                break
+            program = generate_program(model)
 
             # assert(len(program) == num_rules)
             # if size < chunk_bounds.min_literals:
@@ -584,19 +552,19 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
                 if tester.is_complete(program, pos) and tester.is_consistent_all(program):
                     solution_found = True
 
-            # # if WITH_CRAP_CHECK:
-            # has_crap = False
-            # if program in tracker.seen_crap:
-            #     print('CRAP1')
-            #     pprint(program)
-            #     has_crap = True
-            # for rule in program:
-            #     if frozenset([rule]) in tracker.seen_crap:
-            #         print('CRAP2')
-            #         pprint([rule])
-            #         has_crap = True
-            # if has_crap:
-            #     stats.crap_count +=1
+            # if WITH_CRAP_CHECK:
+            has_crap = False
+            if program in tracker.seen_crap:
+                print('CRAP1')
+                pprint(program)
+                has_crap = True
+            for rule in program:
+                if frozenset([rule]) in tracker.seen_crap:
+                    print('CRAP2')
+                    pprint([rule])
+                    has_crap = True
+            if has_crap:
+                stats.crap_count +=1
 
             if not tracker.settings.recursion:
                 check_crap(tracker, program)
@@ -611,30 +579,13 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
                 fo_cons = build_constraints(settings, stats, constrainer, tester, program, pos) - all_fo_cons
                 all_fo_cons.update(fo_cons)
 
-                # print('FIRST-ORDER')
-                # for h, b in fo_cons:
-                #     if h:
-                #         print('inc', h)
-                #     else:
-                #         print('con', ','.join(str(x) for x in b))
-
             # GROUND CONSTRAINTS
             with stats.duration('ground'):
                 ground_cons = bind_vars_in_cons(stats, grounder, fo_cons)
-                # print('PROPOSITIONAL')
-                # for h, b in ground_cons:
-                #     if h:
-                #         print('inc', h)
-                #     else:
-                #         print('con', ','.join(str(x) for x in b))
 
             # ADD CONSTRAINTS TO SOLVER
             with stats.duration('add'):
                 solver.add_ground_clauses(ground_cons)
-
-            # if stats.total_programs > 10:
-                # exit()
-
     return None
 
 def tmp():
@@ -754,7 +705,8 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
     specialisation = set()
     redundancy = set()
     subsumption = set()
-    covers = set()
+    elimination = set()
+    # covers = set()
 
     chunk_prog = None
 
@@ -798,18 +750,18 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
             for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
                 subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
-        if WITH_COVERAGE_CHECK:
-            for rule in prog:
-                _, body = rule
-                handle = constrainer.make_clause_handle(rule)
-                covers.add(f'seen({handle},{len(body)})')
-                for ex in chunk_exs:
-                    if tester.is_complete([rule], [ex]):
-                        covers.add(f'covers({handle},{ex})')
+        # if WITH_COVERAGE_CHECK:
+        #     for rule in prog:
+        #         _, body = rule
+        #         handle = constrainer.make_clause_handle(rule)
+        #         covers.add(f'seen({handle},{len(body)})')
+        #         for ex in chunk_exs:
+        #             if tester.is_complete([rule], [ex]):
+        #                 covers.add(f'covers({handle},{ex})')
 
-    if WITH_COVERAGE_CHECK:
-        for e in chunk_exs:
-            covers.add(f'example({e})')
+    # if WITH_COVERAGE_CHECK:
+    #     for e in chunk_exs:
+    #         covers.add(f'example({e})')
 
     # CHECK INCONSISTENT PROGRAMS
     for prog in tracker.seen_inconsistent:
@@ -839,12 +791,11 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
             for r1, r2 in tester.find_redundant_clauses(tuple(prog)):
                 subsumption.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
-    # if WITH_CRAP_CHECK:
-        # for prog in tracker.seen_crap:
-            # generalisation.update(constrainer.elimination_constraint(prog))
+    if WITH_CRAP_CHECK:
+        for prog in tracker.seen_crap:
+            elimination.update(constrainer.elimination_constraint(prog))
 
-    cons = Constraints(tracker, generalisation, specialisation, redundancy, subsumption)
-    cons.covers = covers
+    cons = Constraints(tracker, generalisation, specialisation, redundancy, subsumption, elimination)
 
     return chunk_prog, cons
 
@@ -862,12 +813,6 @@ def remove_redundancy(tester, old_prog):
     assert(old_success_set == new_success_set)
     if len(new_prog) < len(old_prog):
         dbg(f'reduced program from {len(old_prog)} to {len(new_prog)}')
-        # dbg('old program:')
-        # pprint(old_prog)
-        # print(tester.test_all(old_prog))
-        # dbg('new program:')
-        # pprint(new_prog)
-        # print(tester.test_all(new_prog))
     return new_prog
 
 def get_union_of_example_progs(tracker, chunk_exs):
