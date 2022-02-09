@@ -19,7 +19,7 @@ WITH_MIN_LITERALS = True
 WITH_MIN_RULE_SIZE = False
 # WITH_MIN_RULE_SIZE = True
 WITH_MAX_RULE_BOUND = False
-WITH_MAX_RULE_BOUND = True
+# WITH_MAX_RULE_BOUND = True
 WITH_CRAP_CHECK = False
 WITH_CRAP_CHECK = True
 WITH_BOOTSTRAPPING = True
@@ -278,7 +278,6 @@ class Tracker:
         self.pos_coverage = {}
         # TMP!!
         self.pos_coverage2 = {}
-        self.seen_crap2 = set()
 
         self.settings.WITH_OPTIMISTIC = WITH_OPTIMISTIC
         self.settings.WITH_CHUNKING = WITH_CHUNKING
@@ -558,19 +557,19 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
                 if tester.is_complete(program, pos) and tester.is_consistent_all(program):
                     solution_found = True
 
-            # if WITH_CRAP_CHECK:
-            has_crap = False
-            if program in tracker.seen_crap2:
-                print('CRAP1')
-                pprint(program)
-                has_crap = True
-            for rule in program:
-                if frozenset([rule]) in tracker.seen_crap2:
-                    print('CRAP2')
-                    pprint([rule])
-                    has_crap = True
-            if has_crap:
-                stats.crap_count +=1
+            # # if WITH_CRAP_CHECK:
+            # has_crap = False
+            # if program in tracker.seen_crap2:
+            #     print('CRAP1')
+            #     pprint(program)
+            #     has_crap = True
+            # for rule in program:
+            #     if frozenset([rule]) in tracker.seen_crap2:
+            #         print('CRAP2')
+            #         pprint([rule])
+            #         has_crap = True
+            # if has_crap:
+            #     stats.crap_count +=1
 
             with stats.duration('crap and cache'):
                 check_crap(tracker, program)
@@ -692,7 +691,7 @@ def calc_chunk_bounds(tracker, best_prog, chunk_exs):
     return bounds
 
 def check_crap(tracker, prog):
-    if tracker.settings.recursion:
+    if tracker.settings.recursion or tracker.settings.predicate_invention:
         return
 
     if tracker.tester.is_inconsistent(prog):
@@ -704,8 +703,10 @@ def check_crap(tracker, prog):
         return
 
     other_prog = tracker.pos_coverage[xs]
+
     if prog == other_prog:
         pass
+
     # if this program is smaller than another with the same success set
     elif num_literals(prog) < num_literals(other_prog):
         # then the other program is crap
@@ -715,7 +716,7 @@ def check_crap(tracker, prog):
         tracker.seen_crap.add(prog)
 
 def check_crap2(tracker, prog):
-    if tracker.settings.recursion:
+    if tracker.settings.recursion or tracker.settings.predicate_invention:
         return
 
     if prog in tracker.pos_coverage2:
@@ -726,27 +727,22 @@ def check_crap2(tracker, prog):
 
     xs = tracker.tester.pos_covered(prog)
 
+    to_remove = set()
     for prog2, xs2 in tracker.pos_coverage2.items():
         # if the other program is smaller and has a larger coverage
         if num_literals(prog2) < num_literals(prog) and xs.issubset(xs2):
             # then this program is crap
-            # print('')
-            # print('prog 1 is crap')
-            # print('prog1')
-            # pprint(prog)
-            # print('prog2')
-            # pprint(prog2)
-            # tracker.seen_crap2.add(prog)
             tracker.seen_crap.add(prog)
             return
         # if this program is smaller and has a larger coverage
         if num_literals(prog) < num_literals(prog2) and xs2.issubset(xs):
-            print('crap_2')
             # other program is crap
-            # tracker.seen_crap2.add(prog2)
             tracker.seen_crap.add(prog2)
-            del tracker.pos_coverage2[prog2]
-            # break???
+            to_remove.add(prog2)
+            # might be able to break here
+
+    for k in to_remove:
+        del tracker.pos_coverage2[k]
 
     tracker.pos_coverage2[prog] = xs
 

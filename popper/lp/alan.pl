@@ -735,3 +735,160 @@ only_once(P,A):-
 %%     not multiclause(P,A),
 %%     only_once(P,A).
 
+
+
+
+
+%% %% =========
+
+%% %% HEAD VARS ARE VALID
+%% valid_vars(C,(V0,V1)):-
+%%     head_literal(C,_,_,(V0,V1)).
+%% valid_vars(C,(V1,V0)):-
+%%     head_literal(C,_,_,(V0,V1)).
+
+%% %% ab | bc | cd | de
+%% valid_vars(C,Vars):-
+%%     body_literal(C,_,_,Vars),
+%%     Vars = (V0,V0+1).
+%% valid_vars(C,Vars):-
+%%     body_literal(C,_,_,Vars),
+%%     Vars = (V0+1,V0).
+
+%% %% ac -> ab
+%% %% ad -> ac
+%% %% bd -> bc | ac
+%% %% be -> bd | ad
+%% %% df -> de | ce | be | ae
+%% valid_vars(C,Vars):-
+%%     body_literal(C,_,_,Vars),
+%%     Vars = (V1,V2), % (d,f)
+%%     V2 > V1+1,      % (f > d+1)
+%%     V3 <= V1,       % v3 is less than d, so {a,b,c}
+%%     valid_vars(C,(V3,V2-1)).
+
+%% %% ac -> ba
+%% %% ad -> ca
+%% %% bd -> cb | ca
+%% %% be -> db | da
+%% %% cf -> ec | eb | ea
+%% valid_vars(C,Vars):-
+%%     body_literal(C,_,_,Vars),
+%%     Vars = (V1,V2),
+%%     V2 > V1+1,
+%%     V3 <= V1,
+%%     valid_vars(C,(V2-1,V3)).
+
+%% %% ca -> ab
+%% %% da -> ac
+%% %% db -> bc | ac
+%% %% eb -> bd | ad
+%% %% fc -> ce | be | ae
+%% valid_vars(C,Vars):-
+%%     body_literal(C,_,_,Vars),
+%%     Vars = (V1,V2), % (f,c)
+%%     V1 > V2+1,
+%%     V3 <= V2,
+%%     valid_vars(C,(V3,V1-1)).
+
+%% %% ca -> ba
+%% %% da -> ca
+%% %% db -> cb | ca
+%% %% eb -> db | da
+%% %% fc -> ec | eb | ea
+%% valid_vars(C,Vars):-
+%%     body_literal(C,_,_,Vars),
+%%     Vars = (V1,V2), % (f,c)
+%%     V1 > V2+1,
+%%     V3 <= V2,
+%%     valid_vars(C,(V1-1,V3)).
+
+
+%% %% valid_vars(C,(V0,V1)):-
+%%     %% valid_vars(C,(V1,V0)).
+%% %% #show valid_vars/2.
+
+%% a:-
+%%     body_literal(C,_,2,Vars),
+%%     not valid_vars(C,Vars).
+%% :- a.
+
+
+%% %% ==========================================================================================
+%% %% BK BIAS CONSTRAINTS
+%% %% ==========================================================================================
+
+%% #defined prop/2.
+%% #defined prop/3.
+%% %% #defined prop/4.
+
+%% %% :-
+%% %%     unique_pA(P),
+%% %%     body_literal(R,P,_,_),
+%% %%     #count{A : body_literal(R,P,_,(A,))} > 1.
+
+
+%% %% :- prop(singleton,P), body_literal(Rule,P,1,_), #count{A : body_literal(Rule,P,A,(A,))} > 1.
+%% :- prop(singleton,P), body_literal(Rule,P,_,_), #count{Vars : body_literal(Rule,P,A,Vars)} > 1.
+
+%% :- prop(asymmetric_ab_ba,P), body_literal(Rule,P,_,(A,B)), body_literal(Rule,P,_,(B,A)).
+%% :- prop(asymmetric_abc_acb,P), body_literal(Rule,P,_,(A,B,C)), body_literal(Rule,P,_,(A,C,B)).
+%% :- prop(asymmetric_abc_bac,P), body_literal(Rule,P,_,(A,B,C)), body_literal(Rule,P,_,(B,A,C)).
+%% :- prop(asymmetric_abc_bca,P), body_literal(Rule,P,_,(A,B,C)), body_literal(Rule,P,_,(B,C,A)).
+%% :- prop(asymmetric_abc_cab,P), body_literal(Rule,P,_,(A,B,C)), body_literal(Rule,P,_,(C,A,B)).
+%% :- prop(asymmetric_abc_cba,P), body_literal(Rule,P,_,(A,B,C)), body_literal(Rule,P,_,(C,B,A)).
+%% :- prop(asymmetric_abcd_abdc,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(A,B,D,C)).
+%% :- prop(asymmetric_abcd_acbd,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(A,C,B,D)).
+%% :- prop(asymmetric_abcd_acdb,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(A,C,D,B)).
+%% :- prop(asymmetric_abcd_adbc,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(A,D,B,C)).
+%% :- prop(asymmetric_abcd_adcb,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(A,D,C,B)).
+%% :- prop(asymmetric_abcd_bacd,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(B,A,C,D)).
+%% :- prop(asymmetric_abcd_badc,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(B,A,D,C)).
+%% :- prop(asymmetric_abcd_bcad,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(B,C,A,D)).
+%% :- prop(asymmetric_abcd_bcda,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(B,C,D,A)).
+%% :- prop(asymmetric_abcd_bdac,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(B,D,A,C)).
+%% :- prop(asymmetric_abcd_bdca,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(B,D,C,A)).
+%% :- prop(asymmetric_abcd_cabd,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(C,A,B,D)).
+%% :- prop(asymmetric_abcd_cadb,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(C,A,D,B)).
+%% :- prop(asymmetric_abcd_cbad,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(C,B,A,D)).
+%% :- prop(asymmetric_abcd_cbda,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(C,B,D,A)).
+%% :- prop(asymmetric_abcd_cdab,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(C,D,A,B)).
+%% :- prop(asymmetric_abcd_cdba,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(C,D,B,A)).
+%% :- prop(asymmetric_abcd_dabc,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(D,A,B,C)).
+%% :- prop(asymmetric_abcd_dacb,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(D,A,C,B)).
+%% :- prop(asymmetric_abcd_dbac,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(D,B,A,C)).
+%% :- prop(asymmetric_abcd_dbca,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(D,B,C,A)).
+%% :- prop(asymmetric_abcd_dcab,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(D,C,A,B)).
+%% :- prop(asymmetric_abcd_dcba,P), body_literal(Rule,P,_,(A,B,C,D)), body_literal(Rule,P,_,(D,C,B,A)).
+
+%% :- prop(unique_a_b,P), body_literal(Rule,P,_,(A,_)), #count{B : body_literal(Rule,P,_,(A,B))} > 1.
+%% :- prop(unique_a_bc,P), body_literal(Rule,P,_,(A,_,_)), #count{B,C : body_literal(Rule,P,_,(A,B,C))} > 1.
+%% :- prop(unique_a_bcd,P), body_literal(Rule,P,_,(A,_,_,_)), #count{B,C,D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_ab_c,P), body_literal(Rule,P,_,(A,B,_)), #count{C : body_literal(Rule,P,_,(A,B,C))} > 1.
+%% :- prop(unique_ab_cd,P), body_literal(Rule,P,_,(A,B,_,_)), #count{C,D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_abc_d,P), body_literal(Rule,P,_,(A,B,C,_)), #count{D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_abd_c,P), body_literal(Rule,P,_,(A,B,_,D)), #count{C : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_ac_b,P), body_literal(Rule,P,_,(A,_,C)), #count{B : body_literal(Rule,P,_,(A,B,C))} > 1.
+%% :- prop(unique_ac_bd,P), body_literal(Rule,P,_,(A,_,C,_)), #count{B,D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_acd_b,P), body_literal(Rule,P,_,(A,_,C,D)), #count{B : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_ad_bc,P), body_literal(Rule,P,_,(A,_,_,D)), #count{B,C : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_b_a,P), body_literal(Rule,P,_,(_,B)), #count{A : body_literal(Rule,P,_,(A,B))} > 1.
+%% :- prop(unique_b_ac,P), body_literal(Rule,P,_,(_,B,_)), #count{A,C : body_literal(Rule,P,_,(A,B,C))} > 1.
+%% :- prop(unique_b_acd,P), body_literal(Rule,P,_,(_,B,_,_)), #count{A,C,D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_bc_a,P), body_literal(Rule,P,_,(_,B,C)), #count{A : body_literal(Rule,P,_,(A,B,C))} > 1.
+%% :- prop(unique_bc_ad,P), body_literal(Rule,P,_,(_,B,C,_)), #count{A,D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_bcd_a,P), body_literal(Rule,P,_,(_,B,C,D)), #count{A : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_bd_ac,P), body_literal(Rule,P,_,(_,B,_,D)), #count{A,C : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_c_ab,P), body_literal(Rule,P,_,(_,_,C)), #count{A,B : body_literal(Rule,P,_,(A,B,C))} > 1.
+%% :- prop(unique_c_abd,P), body_literal(Rule,P,_,(_,_,C,_)), #count{A,B,D : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_cd_ab,P), body_literal(Rule,P,_,(_,_,C,D)), #count{A,B : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+%% :- prop(unique_d_abc,P), body_literal(Rule,P,_,(_,_,_,D)), #count{A,B,C : body_literal(Rule,P,_,(A,B,C,D))} > 1.
+
+%% :- prop(antitransitive,P), body_literal(Rule,P,_,(A,B)), body_literal(Rule,P,_,(B,C)), body_literal(Rule,P,_,(A,C)).
+
+%% :- prop(antitriangular,P), body_literal(Rule,P,_,(A,B)), body_literal(Rule,P,_,(B,C)), body_literal(Rule,P,_,(C,A)).
+
+%% :- prop(unsat_pair,P,Q), body_literal(Rule,P,_,Vars), body_literal(Rule,Q,_,Vars).
+
+%% :- prop(precon,P,Q), body_literal(Rule,P,_,(A,)), body_literal(Rule,Q,_,(A,B)).
+%% :- prop(postcon,P,Q), body_literal(Rule,P,_,(A,B)), body_literal(Rule,Q,_,(B,)).
