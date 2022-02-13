@@ -19,7 +19,7 @@ WITH_MIN_LITERALS = True
 WITH_MIN_RULE_SIZE = False
 # WITH_MIN_RULE_SIZE = True
 WITH_MAX_RULE_BOUND = False
-# WITH_MAX_RULE_BOUND = True
+WITH_MAX_RULE_BOUND = True
 WITH_CRAP_CHECK = False
 WITH_CRAP_CHECK = True
 WITH_BOOTSTRAPPING = True
@@ -363,7 +363,8 @@ def build_constraints(tracker, stats, constrainer, tester, program, pos):
     if tester.is_inconsistent(program):
         cons.update(constrainer.generalisation_constraint(program))
     else:
-        cons.update(constrainer.specialisation_constraint(program))
+        if not tracker.settings.functional_test or tester.is_functional(program, pos):
+            cons.update(constrainer.specialisation_constraint(program))
 
     if tester.is_totally_incomplete(program, pos):
         cons.update(constrainer.redundancy_constraint(program))
@@ -373,8 +374,10 @@ def build_constraints(tracker, stats, constrainer, tester, program, pos):
         for rule in program:
             cons.update(constrainer.subsumption_constraint(rule))
 
-    if tracker.settings.functional_test and tester.is_non_functional(program):
-        cons.update(constrainer.generalisation_constraint(program))
+    # apply functional test only when the program is complete and consistent
+    if tester.is_complete(program, pos) and tester.is_consistent_all(program):
+        if tracker.settings.functional_test and tester.is_non_functional(program, pos):
+            cons.update(constrainer.generalisation_constraint(program))
 
     # eliminate generalisations of rules with redundant literals
     for rule in program:
@@ -555,7 +558,8 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
             solution_found = False
             with stats.duration('test'):
                 if tester.is_complete(program, pos) and tester.is_consistent_all(program):
-                    solution_found = True
+                    if not tracker.settings.functional_test or tester.is_functional(program, pos):
+                        solution_found = True
 
             # # if WITH_CRAP_CHECK:
             # has_crap = False
@@ -770,14 +774,20 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
             continue
 
         if tester.is_complete(prog, chunk_exs):
+            # if the program is not functional then we can prune generalisations of it
+            if tracker.settings.functional_test and not tester.is_functional(prog, chunk_exs):
+                generalisation.update(constrainer.generalisation_constraint(prog))
+                continue
+
             # if prog is complete, then no need to make it more general
             # no need to add any constraints as we will never consider programs bigger than it (since it is complete and consistent)
             chunk_prog = prog
             chunk_bounds = calc_chunk_bounds(tracker, chunk_prog, chunk_exs)
             continue
 
-        # if prog is consistent, then no need to make it more specific
-        specialisation.update(constrainer.specialisation_constraint(prog))
+        if not tracker.settings.functional_test or tester.is_functional(prog, chunk_exs):
+            # if prog is consistent, then no need to make it more specific
+            specialisation.update(constrainer.specialisation_constraint(prog))
 
         # TODO: CHECK WHETHER SEPARABLE CHECK IS NECESSARY
         if separable(prog):

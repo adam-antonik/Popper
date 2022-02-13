@@ -83,9 +83,13 @@ class Tester():
         prog = f"[{','.join(prog)}]"
         return list(self.prolog.query(f'redundant_clause({prog})'))
 
-    def is_non_functional(self, program):
+    def is_non_functional(self, program, pos):
         with self.using(program):
-            return list(self.prolog.query(f'non_functional.'))
+            return len(list(self.prolog.query(f'non_functional.'))) > 0
+
+    def is_functional(self, program, pos):
+        with self.using(program):
+            return list(self.prolog.query(f'non_functional.')) == []
 
     def success_set(self, rules):
         k = hash(frozenset(rules))

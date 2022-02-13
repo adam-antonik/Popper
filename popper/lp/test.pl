@@ -47,9 +47,15 @@ success_set(Xs):-
     findall(ID, (ex_index(ID,Atom),test_ex(Atom)), Xs).
 
 %% ========== FUNCTIONAL CHECKS ==========
+
+non_functional_aux(Atom):-
+    timeout(T),
+    catch(call_with_time_limit(T, non_functional(Atom)),time_limit_exceeded,false),!.
+
 non_functional:-
-    pos(Atom),
-    non_functional(Atom),!.
+    pos_index(_,Atom),
+    non_functional_aux(Atom),!.
+
 
 %% ========== REDUNDANCY CHECKS ==========
 
