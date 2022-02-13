@@ -129,13 +129,15 @@ def popper(settings, stats):
         stats.update_num_literals(size)
         solver.update_number_of_literals(size)
 
+        print(f'% searching programs of size:{size}')
+
         while True:
             # GENERATE HYPOTHESIS
             with stats.duration('generate'):
                 model = solver.get_model()
                 if not model:
                     break
-                (program, before, min_clause) = generate_program(model)
+                program, before, min_clause = generate_program(model)
 
             # TEST HYPOTHESIS
             with stats.duration('test'):
