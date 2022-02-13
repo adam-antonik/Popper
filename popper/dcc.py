@@ -27,7 +27,7 @@ WITH_SUBSUMPTION = False
 WITH_SUBSUMPTION = True
 WITH_COVERAGE_CHECK = False
 # WITH_COVERAGE_CHECK = True
-MAX_RULES = 4
+MAX_RULES = 6
 
 class Bounds:
     def __init__(self, max_literals):
@@ -686,10 +686,14 @@ def calc_min_rule_size(tracker, best_prog):
 
 def calc_chunk_bounds(tracker, best_prog, chunk_exs):
     bounds = Bounds(tracker.max_total_literals)
-    bounds.max_rules = calc_max_rules(tracker, best_prog, chunk_exs)
+
+    if tracker.best_prog == None or tracker.best_prog_errors > 0:
+        return bounds
+
     bounds.min_literals = 1 #
     if all(tracker.best_progs[ex] != None for ex in chunk_exs):
         bounds.min_literals = max(num_literals(tracker.best_progs[ex]) for ex in chunk_exs)
+    bounds.max_rules = calc_max_rules(tracker, best_prog, chunk_exs)
     bounds.max_literals = calc_max_literals(tracker, best_prog)
     bounds.min_rule_size = calc_min_rule_size(tracker, best_prog)
     return bounds
@@ -883,7 +887,7 @@ def get_union_of_example_progs(tracker, chunk_exs):
         return None
     union = form_union([tracker.best_progs[ex] for ex in chunk_exs])
     chunk_prog = remove_redundancy(tracker.tester, union)
-    dbg('BEST_SO_FAR')
+    dbg(f'BEST_SO_FAR size:{num_literals(chunk_prog)} errors:{calc_score(tracker.tester, chunk_prog)}')
     pprint(chunk_prog)
     assert(tracker.tester.is_complete(chunk_prog, chunk_exs))
     assert(len(chunk_prog) == len(tracker.tester.reduce_subset(chunk_prog, chunk_exs)))
@@ -978,9 +982,13 @@ def learn_iteration_prog(tracker, all_chunks, chunk_size):
 
         iteration_progs.add(chunk_prog)
 
-    iteration_prog = remove_redundancy(tracker.tester, form_union(iteration_progs))
+
+    iteration_prog = form_union(iteration_progs)
+    iteration_prog = remove_redundancy(tracker.tester, iteration_prog)
+    pprint(iteration_prog)
     assert(tracker.tester.is_complete(iteration_prog, chunk_exs))
-    assert(tracker.tester.is_consistent_all(iteration_prog))
+    if not tracker.settings.recursion:
+        assert(tracker.tester.is_consistent_all(iteration_prog))
     return iteration_prog, False
 
 def perform_chunking(tracker):

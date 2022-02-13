@@ -10,13 +10,12 @@ body_pred(c1,1).
 body_pred(c2,1).
 body_pred(c3,1).
 body_pred(c4,1).
-body_pred(c5,1).
-body_pred(c6,1).
-body_pred(c7,1).
-body_pred(c8,1).
-body_pred(c9,1).
-body_pred(c10,1).
-
+%% body_pred(c5,1).
+%% body_pred(c6,1).
+%% body_pred(c7,1).
+%% body_pred(c8,1).
+%% body_pred(c9,1).
+%% body_pred(c10,1).
 
 
 
@@ -29,9 +28,3 @@ type(c1,(element,)).
 type(c2,(element,)).
 type(c3,(element,)).
 type(c4,(element,)).
-type(c5,(element,)).
-type(c6,(element,)).
-type(c7,(element,)).
-type(c8,(element,)).
-type(c9,(element,)).
-type(c10,(element,)).
