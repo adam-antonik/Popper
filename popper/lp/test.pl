@@ -1,4 +1,6 @@
 %%%%%%%%%% EXAMPLE LOADING %%%%%%%%%%
+:- dynamic recursive/0.
+
 
 load_examples:-
     load_pos,
@@ -30,21 +32,51 @@ assert_neg_aux([H|T],I1):-
 
 %%%%%%%%%% EXAMPLE TESTING %%%%%%%%%%
 
-ex_index(ID,Atom):-
-    current_predicate(pos_index/2),
-    pos_index(ID,Atom).
-ex_index(ID,Atom):-
-    current_predicate(neg_index/2),
-    neg_index(ID,Atom).
+%% ex_index(ID,Atom):-
+%%     current_predicate(pos_index/2),
+%%     pos_index(ID,Atom).
+%% ex_index(ID,Atom):-
+%%     current_predicate(neg_index/2),
+%%     neg_index(ID,Atom).
 
 test_ex(Atom):-
-    functor(Atom,P,A),
-    current_predicate(P/A),!,
+    recursive,!,
     timeout(T),
-    catch(call_with_time_limit(T, call(Atom)),time_limit_exceeded,false),!.
+    catch(call_with_time_limit(T, call(Atom)), time_limit_exceeded,false),!.
 
-success_set(Xs):-
-    findall(ID, (ex_index(ID,Atom),test_ex(Atom)), Xs).
+test_ex(Atom):-
+    call(Atom).
+
+%% success_set(Xs):-
+    %% findall(ID, (ex_index(ID,Atom),test_ex(Atom)), Xs).
+
+%% pos_covered(X):-
+%%     pos_index(X,Atom),
+%%     call(Atom).
+
+all_pos_covered(Xs):-
+    findall(ID, (pos_index(ID,Atom), test_ex(Atom)), Xs).
+
+pos_covered(X):-
+    pos_index(X,Atom),
+    test_ex(Atom),!.
+
+%% covered(X):-
+%%     ex_index(X,Atom),
+%%     call(Atom),!.
+
+%% inconsistent:-
+
+
+inconsistent:-
+    %% timeout(T),
+    neg_index(_,Atom),
+    test_ex(Atom),!.
+    %% functor(Atom,P,A),
+    %% current_predicate(P/A),
+    %% timeout(T),
+    %% call(Atom),!.
+    %% test_ex(Atom),!.
 
 %% ========== FUNCTIONAL CHECKS ==========
 

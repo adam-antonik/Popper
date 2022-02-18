@@ -1,3 +1,6 @@
+:-table (f/1) as incremental.
+:-dynamic([f/1], [incremental(true)]).
+
 tail([_|T],T).
 head([H|_],H).
 empty([]).

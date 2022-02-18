@@ -1,3 +1,6 @@
+:-table (next/2) as incremental.
+:-dynamic([next/2], [incremental(true)]).
+
 c_p(p).
 c_q(q).
 c_r(r).

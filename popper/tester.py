@@ -5,7 +5,7 @@ import sys
 import time
 import pkg_resources
 from contextlib import contextmanager
-from . core import Clause, Literal
+from . core import Clause, Literal, separable
 from datetime import datetime
 
 class Tester():
@@ -14,8 +14,6 @@ class Tester():
         self.prolog = Prolog()
         self.eval_timeout = settings.eval_timeout
         self.cached_redundant_literals = {}
-        self.seen_tests = {}
-        self.cached_success_set = {}
 
         bk_pl_path = self.settings.bk_file
         exs_pl_path = self.settings.ex_file
@@ -34,34 +32,32 @@ class Tester():
 
         self.prolog.assertz(f'timeout({self.eval_timeout})')
 
+        self.cached_is_inconsistent = {}
+        self.cached_all_pos_covered = {}
+        self.cached_pos_covered = {}
+
     def first_result(self, q):
         return list(self.prolog.query(q))[0]
 
     @contextmanager
     def using(self, rules):
+        recursive = not separable(rules)
         current_clauses = set()
         try:
+            if recursive:
+                self.prolog.assertz('recursive')
+
             for rule in rules:
-                (head, body) = rule
+                head, body = rule
                 self.prolog.assertz(Clause.to_code(Clause.to_ordered(rule)))
                 current_clauses.add((head.predicate, head.arity))
             yield
         finally:
+            if recursive:
+                self.prolog.retractall('recursive')
             for predicate, arity in current_clauses:
                 args = ','.join(['_'] * arity)
                 self.prolog.retractall(f'{predicate}({args})')
-
-    # def check_redundant_literal(self, program):
-    #     for clause in program:
-    #         k = Clause.clause_hash(clause)
-    #         if k in self.cached_redundant_literals:
-    #             continue
-    #         self.cached_redundant_literals.add(k)
-    #         (head, body) = clause
-    #         C = f"[{','.join(('not_'+ Literal.to_code(head),) + tuple(Literal.to_code(lit) for lit in body))}]"
-    #         res = list(self.prolog.query(f'redundant_literal({C})'))
-    #         if res:
-    #             yield clause
 
     def rule_has_redundant_literal(self, rule):
         k = hash(rule)
@@ -83,36 +79,9 @@ class Tester():
         prog = f"[{','.join(prog)}]"
         return list(self.prolog.query(f'redundant_clause({prog})'))
 
-    def is_non_functional(self, program, pos):
-        with self.using(program):
-            return len(list(self.prolog.query(f'non_functional.'))) > 0
-
     def is_functional(self, program, pos):
         with self.using(program):
             return list(self.prolog.query(f'non_functional.')) == []
-
-    def success_set(self, rules):
-        k = hash(frozenset(rules))
-
-        if k in self.cached_success_set:
-            return self.cached_success_set[k]
-
-        # if a single rule or non-separable
-        if len(rules) == 1 or any(not Clause.is_separable(rule) for rule in rules):
-            with self.using(rules):
-                xs = set(next(self.prolog.query('success_set(Xs)'))['Xs'])
-                self.cached_success_set[k] = xs
-                return xs
-
-        xs = set()
-        for rule in rules:
-            xs.update(self.success_set([rule]))
-        self.cached_success_set[k] = xs
-        return xs
-
-    def pos_covered(self, rules):
-        covered = self.success_set(rules)
-        return frozenset(x for x in self.pos if x in covered)
 
     def find_redundant_clauses(self, rules):
         prog = []
@@ -128,101 +97,118 @@ class Tester():
             r1 = dic['R1']
             yield rules[r0], rules[r1]
 
-    def test(self, rules, pos, neg):
-        covered = self.success_set(rules)
+    def pos_covered(self, rules, x):
+        if rules in self.cached_pos_covered:
+            if x in self.cached_pos_covered[rules]:
+                return self.cached_pos_covered[rules][x]
+        else:
+            self.cached_pos_covered[rules] = {}
 
-        tp, fn, tn, fp = 0, 0, 0, 0
+        # if a single rule or non-separable
+        if len(rules) == 1 or any(not Clause.is_separable(rule) for rule in rules):
+            with self.using(rules):
+                res = len(list(self.prolog.query(f'pos_covered({x})'))) > 0
+                self.cached_pos_covered[rules][x] = res
+                return res
 
-        for p in pos:
-            if p in covered:
-                tp +=1
-            else:
-                fn +=1
-        for n in neg:
-            if n in covered:
-                fp +=1
-            else:
-                tn +=1
+        res = any(self.pos_covered(frozenset([rule]), x) for rule in rules)
+        self.cached_pos_covered[rules][x] = res
+        return res
 
-        return tp, fn, tn, fp
-
-    def test_all(self, rules):
-        covered = self.success_set(rules)
-
-        tp, fn, tn, fp = 0, 0, 0, 0
-
-        for p in self.pos:
-            if p in covered:
-                tp +=1
-            else:
-                fn +=1
-        for n in self.neg:
-            if n in covered:
-                fp +=1
-            else:
-                tn +=1
-
-        return tp, fn, tn, fp
-
-
-    def test_subset(self, rules, pos, neg):
-        covered = self.success_set(rules)
-
-        tp, fn, tn, fp = 0, 0, 0, 0
-
-        for p in pos:
-            if p in covered:
-                tp +=1
-            else:
-                fn +=1
-        for n in neg:
-            if n in covered:
-                fp +=1
-            else:
-                tn +=1
-
-        return tp, fn, tn, fp
+    def pos_covered_all(self, rules):
+        return frozenset((self.pos_covered(rules, x) for x in self.pos))
 
     def is_complete(self, rules, pos):
-        return all(x in self.success_set(rules) for x in pos)
-
-    def is_complete_all(self, rules):
-        return self.is_complete(rules, self.pos)
-
-    def is_consistent_all(self, rules):
-        return all(x not in self.success_set(rules) for x in self.neg)
-
-    def is_incomplete(self, rules, pos):
-        return any(x not in self.success_set(rules) for x in pos)
-
-    def is_incomplete_all(self, rules):
-        return self.is_incomplete(rules, self.pos)
-
-    def is_totally_incomplete(self, rules, pos):
-        return all(x not in self.success_set(rules) for x in pos)
-
-    def is_totally_incomplete_all(self, rules):
-        return self.is_totally_incomplete(rules, self.pos)
+        return all(self.pos_covered(rules, x) for x in pos)
 
     def is_inconsistent(self, rules):
-        return any(x in self.success_set(rules) for x in self.neg)
+        if rules in self.cached_is_inconsistent:
+            return self.cached_is_inconsistent[rules]
 
-    # TMP!!!!!
-    def reduce_success_set_all(self, rules):
-        rules = list(rules)
-        rules_ss = self.success_set(rules)
-        for i in range(len(rules)):
-            subrules = rules[:i] + rules[i+1:]
-            subrules_ss = self.success_set(subrules)
-            if rules_ss == subrules_ss:
-                return self.reduce_success_set_all(subrules)
-        return frozenset(rules)
+        with self.using(rules):
+            res = len(list(self.prolog.query(f'inconsistent'))) > 0
+        self.cached_is_inconsistent[rules] = res
+        return res
+
+    def is_totally_incomplete(self, rules, pos):
+        return all(not self.pos_covered(rules, x) for x in pos)
+
+    def all_pos_covered(self, rules):
+        if rules in self.cached_all_pos_covered:
+            return self.cached_all_pos_covered[rules]
+
+        # if a single rule or non-separable
+        if len(rules) == 1 or any(not Clause.is_separable(rule) for rule in rules):
+            with self.using(rules):
+                res = frozenset(next(self.prolog.query('all_pos_covered(Xs)'))['Xs'])
+            self.cached_all_pos_covered[rules] = res
+            # hacky but should help
+            if rules not in self.cached_pos_covered:
+                self.cached_pos_covered[rules] = {}
+            for x in self.pos:
+                self.cached_pos_covered[rules][x] = x in res
+            return res
+
+        xs = set()
+        for rule in rules:
+            sub = frozenset([rule])
+            xs.update(self.all_pos_covered(sub))
+        xs = frozenset(xs)
+        if rules not in self.cached_pos_covered:
+            self.cached_pos_covered[rules] = {}
+        for x in self.pos:
+            self.cached_pos_covered[rules][x] = x in xs
+        self.cached_all_pos_covered[rules] = xs
+        return xs
+
+    # def is_incomplete(self, rules, pos):
+        # return self.is_complete(self, rules, pos)
+
+
+    # # OLD!!!
+    # def is_complete(self, rules, pos):
+    #     return all(x in self.success_set(rules) for x in pos)
+
+    # def is_inconsistent(self, rules):
+    #     return any(x in self.success_set(rules) for x in self.neg)
+
+    # def is_totally_incomplete(self, rules, pos):
+    #     return all(x not in self.success_set(rules) for x in pos)
+
+    # def all_pos_covered(self, rules):
+    #     covered = self.success_set(rules)
+    #     return frozenset(x for x in self.pos if x in covered)
+
+
+    # def is_complete_all(self, rules):
+        # return self.is_complete(rules, self.pos)
+
+    # def is_consistent_all(self, rules):
+        # return all(x not in self.success_set(rules) for x in self.neg)
+
+    # def is_incomplete_all(self, rules):
+        # return self.is_incomplete(rules, self.pos)
+
+    # def is_totally_incomplete_all(self, rules):
+        # return self.is_totally_incomplete(rules, self.pos)
+
+    # # TMP!!!!!
+    # def reduce_success_set_all(self, rules):
+    #     assert(not self.is_inconsistent(rules))
+    #     rules_ss = self.pos_covered_all(rules)
+    #     rules = list(rules)
+    #     for i in range(len(rules)):
+    #         subrules = frozenset(rules[:i] + rules[i+1:])
+    #         subrules_ss = self.pos_covered_all(subrules)
+    #         if rules_ss == subrules_ss and not self.is_inconsistent(subrules):
+    #             return self.reduce_success_set_all(subrules)
+    #     return frozenset(rules)
 
     def reduce_subset(self, rules, pos):
         rules = list(rules)
         for i in range(len(rules)):
-            subrules = rules[:i] + rules[i+1:]
-            if self.is_complete(subrules, pos) and self.is_consistent_all(subrules):
+            subrules = frozenset(rules[:i] + rules[i+1:])
+            if self.is_complete(subrules, pos) and not self.is_inconsistent(subrules):
                 return self.reduce_subset(subrules, pos)
         return frozenset(rules)
 
