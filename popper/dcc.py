@@ -11,6 +11,9 @@ from . constrain import Constrain
 from . generate import generate_program
 from . core import Grounding, Clause, Literal, separable
 from collections import defaultdict
+import clingo.script
+clingo.script.enable_python()
+import pkg_resources
 
 WITH_OPTIMISTIC = False
 WITH_CHUNKING = True
@@ -69,6 +72,8 @@ class Tracker:
         self.max_total_literals = None
         self.min_total_rules = 1
         self.max_total_rules = MAX_RULES
+        self.min_size = {}
+        self.no_single_rule_solutions = []
         self.best_prog = None
         self.best_prog_size = None
         self.best_prog_errors = None
@@ -727,8 +732,49 @@ def reuse_seen(tracker, chunk_exs, iteration_progs, chunk_bounds):
             return seen_prog
     return None
 
+def improvement_possible(tracker, chunk_exs, max_rules, max_literals):
+
+    # print('MOO1!!!')
+    # for x in chunk_exs:
+        # print(x)
+    if any(e not in tracker.min_size for e in chunk_exs):
+        return True
+
+    # print('MOOOOO!!!')
+
+    solver = clingo.Control()
+    x = pkg_resources.resource_string(__name__, "lp/bounds.pl").decode()
+    solver.add('base', [], x)
+    prog = []
+    k = tracker.settings.max_body_atoms+1
+    prog.append(f'max_rules({max_rules}).')
+    prog.append(f'max_rule_size({k}).')
+    prog.append(f'max_literals({max_literals}).')
+    for e in chunk_exs:
+        v = tracker.min_size[e]
+        prog.append(f'min_rule_size({e},{v}).')
+
+    for size, exs in tracker.no_single_rule_solutions:
+        prog.append(f':- rule(R,K), K <= {size},' + ','.join(f'covers(R,{ex})' for ex in chunk_exs) + '.')
+
+    prog = '\n'.join(prog)
+
+    solver.add('base', [], prog)
+    solver.ground([("base", [])])
+
+    # def on_model(m):
+        # xs = m.symbols(shown = True)
+        # print(xs)
+
+    return solver.solve().satisfiable
+
 def process_chunk(tracker, chunk_exs, iteration_progs):
     chunk_prog = get_union_of_example_progs(tracker, chunk_exs)
+
+    if chunk_prog:
+        for e in chunk_exs:
+            if e not in tracker.min_size:
+                tracker.min_size[e] = num_literals(chunk_prog)
 
     chunk_bounds = calc_chunk_bounds(tracker, chunk_prog, chunk_exs)
 
@@ -740,6 +786,9 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
         # try to reuse an already found hypothesis
         complete_seen_prog = reuse_seen(tracker, chunk_exs, iteration_progs, chunk_bounds)
         if complete_seen_prog:
+            for e in chunk_exs:
+                if e not in tracker.min_size:
+                    tracker.min_size[e] = num_literals(complete_seen_prog)
             return complete_seen_prog
 
     bootstap_cons = set()
@@ -760,14 +809,22 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
 
     dbg(f'min_literals:{chunk_bounds.min_literals} max_literals:{chunk_bounds.max_literals} max_rules:{chunk_bounds.max_rules}')
 
-    # call popper with the chunk examples and constraints
-    t1 = time.time()
+
+    if chunk_prog and not improvement_possible(tracker, chunk_exs, len(chunk_prog), chunk_bounds.max_literals):
+        print('CANNOT BE REDUCED')
+        return chunk_prog
+
     new_solution = popper(tracker, chunk_exs, tracker.neg, bootstap_cons, chunk_bounds)
-    t2 = time.time()
-    # print('popper time', t2-t1)
 
     if new_solution == None:
+        if chunk_bounds.max_rules == 1:
+            tracker.no_single_rule_solutions.append((chunk_bounds.max_literals, chunk_exs))
+        # UPDATE STUFF HERE!
         return chunk_prog
+
+    for e in chunk_exs:
+        if e not in tracker.min_size:
+            tracker.min_size[e] = num_literals(new_solution)
 
     chunk_prog = frozenset(new_solution)
 
@@ -849,6 +906,8 @@ def perform_chunking(tracker):
 def dcc(settings):
     # maintain stuff during the search
     tracker = Tracker(settings)
+    # HACK
+    ClingoSolver(settings, 10, 10)
 
     # size of the chunks/partitions of the examples
     chunk_size = 1

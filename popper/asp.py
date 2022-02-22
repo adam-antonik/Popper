@@ -162,6 +162,9 @@ class ClingoSolver():
 
         self.solver.add('number_of_literals', ['n'], NUM_OF_LITERALS)
 
+        max_body_atoms = self.solver.symbolic_atoms.by_signature('max_body', arity=1)
+        self.max_body_atoms = next(max_body_atoms).symbol.arguments[0].number
+        settings.max_body_atoms = self.max_body_atoms
         max_vars_atoms = self.solver.symbolic_atoms.by_signature('max_vars', arity=1)
         self.max_vars = next(max_vars_atoms).symbol.arguments[0].number
         max_clauses_atoms = self.solver.symbolic_atoms.by_signature('max_clauses', arity=1)
