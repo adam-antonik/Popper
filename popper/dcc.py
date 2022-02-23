@@ -3,6 +3,7 @@
 import logging
 import sys
 import time
+import math
 from datetime import datetime
 from . util import Settings, Stats, timeout, parse_settings, format_program
 from . asp import ClingoGrounder, ClingoSolver
@@ -103,8 +104,12 @@ class Tracker:
             self.settings.recursion = 'enable_recursion' in f_txt
             self.settings.predicate_invention = 'enable_pi' in f_txt
 
+cached_grounding = {}
 def bind_vars_in_cons(stats, grounder, clauses):
     ground_cons = set()
+
+    d1_total = 0
+    d2_total = 0
 
     for clause in clauses:
         head, body = clause
@@ -117,9 +122,32 @@ def bind_vars_in_cons(stats, grounder, clauses):
         body = tuple(literal for literal in body if not literal.meta)
 
         with stats.duration('Grounding.ground_clause'):
+            k = hash((head, body))
+
             # ground the clause for each variable assignment
             for assignment in assignments:
-                ground_cons.add(Grounding.ground_clause((head, body), assignment))
+
+                # with stats.duration('Grounding.ground_clause.a'):
+                #     t1 = time.time()
+                #     cons = Grounding.ground_clause((head, body), assignment)
+                #     t2 = time.time()
+                #     d1_total += t2-t1
+
+                # with stats.duration('Grounding.ground_clause.b'):
+                # t1 = time.time()
+                k = hash((k, tuple(sorted(assignment.items()))))
+                if k in cached_grounding:
+                    cons = cached_grounding[k]
+                else:
+                    cons = Grounding.ground_clause((head, body), assignment)
+                    cached_grounding[k] = cons
+                # t2 = time.time()
+                # d2_total += t2-t1
+
+                ground_cons.add(cons)
+
+    # print(d1_total, d2_total)
+
 
     return ground_cons
 
@@ -461,17 +489,16 @@ def update_best_prog(tracker, prog):
 
 def calc_max_rules(tracker, best_prog, chunk_exs):
     k = tracker.max_total_rules
-    if best_prog != None:
-        k = min(k, len(best_prog))
 
-    if tracker.settings.recursion or tracker.settings.predicate_invention:
+    if not WITH_MAX_RULE_BOUND:
         return k
 
-    if WITH_MAX_RULE_BOUND:
-        if best_prog != None and len(best_prog) > 1:
-            k = min(k, len(best_prog)-1)
+    if not(tracker.settings.recursion or tracker.settings.predicate_invention):
+        k = min(k, len(chunk_exs))
 
-    k = min(k, len(chunk_exs))
+    if tracker.best_prog != None and tracker.best_prog_errors == 0:
+        k = min(k, len(best_prog))
+
     return k
 
 def calc_max_literals(tracker, best_prog):
@@ -489,9 +516,6 @@ def calc_min_rule_size(tracker, best_prog):
 
 def calc_chunk_bounds(tracker, best_prog, chunk_exs):
     bounds = Bounds(tracker.max_total_literals)
-
-    if tracker.best_prog == None or tracker.best_prog_errors > 0:
-        return bounds
 
     bounds.min_literals = 1 #
     if all(tracker.best_progs[ex] != None for ex in chunk_exs):
@@ -732,20 +756,19 @@ def reuse_seen(tracker, chunk_exs, iteration_progs, chunk_bounds):
             return seen_prog
     return None
 
-def improvement_possible(tracker, chunk_exs, max_rules, max_literals):
+def deduce_tight_bounds(tracker, chunk_exs, max_rules, max_literals):
+    for e in chunk_exs:
+        if e not in tracker.min_size:
+            print('NO PROG FOR', e)
+            # print('TRACKER.MIN_SIZE', tracker.min_size[e])
+        # else:
 
-    # print('MOO1!!!')
-    # for x in chunk_exs:
-        # print(x)
+
     if any(e not in tracker.min_size for e in chunk_exs):
-        return True
+        return True, max_rules, max_literals
 
-    # print('MOOOOO!!!')
-
-    solver = clingo.Control()
     x = pkg_resources.resource_string(__name__, "lp/bounds.pl").decode()
-    solver.add('base', [], x)
-    prog = []
+    prog = [x]
     k = tracker.settings.max_body_atoms+1
     prog.append(f'max_rules({max_rules}).')
     prog.append(f'max_rule_size({k}).')
@@ -759,22 +782,36 @@ def improvement_possible(tracker, chunk_exs, max_rules, max_literals):
 
     prog = '\n'.join(prog)
 
-    solver.add('base', [], prog)
+    with open('tmp-bounds.pl', 'w') as f:
+        f.write(prog)
+
+    # DEDUCE MAX_RULES
+    solver = clingo.Control()
+    solver.add('base', [], prog + "\n" + "#maximize{X : num_rules(X)}.")
+    # print(prog + "\n" + "#maximize{X : num_rules(X)}.")
     solver.ground([("base", [])])
+    max_rules = max_rules
+    sat = False
+    with solver.solve(yield_=True) as handle:
+        for m in handle:
+            max_rules = abs(m.cost[0])
+            # print('max_rules', max_rules)
+            sat = True
 
-    # def on_model(m):
-        # xs = m.symbols(shown = True)
-        # print(xs)
+    if sat:
+        solver = clingo.Control()
+        solver.add('base', [], prog + "\n" + "#maximize{X : num_literals(X)}.")
+        solver.ground([("base", [])])
+        with solver.solve(yield_=True) as handle:
+            for m in handle:
+                max_literals = abs(m.cost[0])
+                # print('max_literals', max_literals)
 
-    return solver.solve().satisfiable
+    print(f'SAT:{sat}, MAX_RULES:{max_rules} MAX_LITERALS:{max_literals}')
+    return sat, max_rules, max_literals
 
 def process_chunk(tracker, chunk_exs, iteration_progs):
     chunk_prog = get_union_of_example_progs(tracker, chunk_exs)
-
-    if chunk_prog:
-        for e in chunk_exs:
-            if e not in tracker.min_size:
-                tracker.min_size[e] = num_literals(chunk_prog)
 
     chunk_bounds = calc_chunk_bounds(tracker, chunk_prog, chunk_exs)
 
@@ -793,7 +830,13 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
 
     bootstap_cons = set()
 
+
+
     if WITH_BOOTSTRAPPING:
+
+        if chunk_prog:
+            improvement_possible, max_rules, max_literals = deduce_tight_bounds(tracker, chunk_exs, len(chunk_prog), chunk_bounds.max_literals)
+
         # find the best program already seen and build constraints for the other programs
         with tracker.stats.duration('check_old_programs'):
             complete_seen_prog, bootstap_cons = check_old_programs(tracker, chunk_exs, chunk_bounds)
@@ -803,23 +846,27 @@ def process_chunk(tracker, chunk_exs, iteration_progs):
             chunk_prog = complete_seen_prog
             chunk_bounds = calc_chunk_bounds(tracker, chunk_prog, chunk_exs)
 
+            for e in chunk_exs:
+                if e not in tracker.min_size:
+                    tracker.min_size[e] = num_literals(complete_seen_prog)
+
             # also update when an improvement is possible
             if chunk_bounds.min_literals >= chunk_bounds.max_literals:
                 return chunk_prog
 
+    if chunk_prog:
+        improvement_possible, max_rules, max_literals = deduce_tight_bounds(tracker, chunk_exs, len(chunk_prog), chunk_bounds.max_literals)
+        if not improvement_possible:
+            return chunk_prog
+        chunk_bounds.max_rules = max_rules
+        chunk_bounds.max_literals = max_literals
+        print('new bounds', chunk_bounds.max_rules, max_literals)
+
     dbg(f'min_literals:{chunk_bounds.min_literals} max_literals:{chunk_bounds.max_literals} max_rules:{chunk_bounds.max_rules}')
-
-
-    if chunk_prog and not improvement_possible(tracker, chunk_exs, len(chunk_prog), chunk_bounds.max_literals):
-        print('CANNOT BE REDUCED')
-        return chunk_prog
-
     new_solution = popper(tracker, chunk_exs, tracker.neg, bootstap_cons, chunk_bounds)
 
     if new_solution == None:
-        if chunk_bounds.max_rules == 1:
-            tracker.no_single_rule_solutions.append((chunk_bounds.max_literals, chunk_exs))
-        # UPDATE STUFF HERE!
+        tracker.no_single_rule_solutions.append((chunk_bounds.max_literals, chunk_exs))
         return chunk_prog
 
     for e in chunk_exs:
@@ -855,7 +902,6 @@ def learn_iteration_prog(tracker, all_chunks, chunk_size):
         chunk_prog = process_chunk(tracker, chunk_exs, iteration_progs)
 
         if not chunk_prog:
-            # return None, 'SHIT'
             continue
 
         # chunk_prog is guaranteed to be complete, consistent, and smaller than the previous best
@@ -871,20 +917,9 @@ def learn_iteration_prog(tracker, all_chunks, chunk_size):
 
         iteration_progs.add(chunk_prog)
 
-    # dbg('ITERATION_PROGS')
     iteration_prog = form_union(iteration_progs)
-    # dbg('ITERATION_PROG')
-    # pprint(iteration_prog)
-    # print('TYPE(ITERATION_PROG)',type(iteration_prog), type(these_chunks), type(these_chunks[0]))
-    # print(type(iteration_prog), iteration_prog, type(all_exs), all_exs)
-    # tracker.stats.show()
     assert(tracker.tester.is_complete(iteration_prog, all_exs))
-    # print('ASDA!!!')
-    # print('len(chunk_exs)', len(all_exs))
     iteration_prog = remove_redundancy(tracker.tester, iteration_prog, all_exs)
-
-    # print('TYPE(ITERATION_PROG)',type(iteration_prog))
-    # pprint(iteration_prog)
     assert(tracker.tester.is_complete(iteration_prog, chunk_exs))
     if not tracker.settings.recursion:
         assert(not tracker.tester.is_inconsistent(iteration_prog))
@@ -920,9 +955,6 @@ def dcc(settings):
 
         # program for this chunk size is the union of the chunk progs
         iteration_prog, proven_optimal = learn_iteration_prog(tracker, all_chunks, chunk_size)
-        if proven_optimal == 'SHIT':
-            tracker.stats.show()
-            return tracker.best_prog, tracker.stats
 
         # TODO: add early stopping here
         if proven_optimal:
@@ -952,8 +984,8 @@ def dcc(settings):
             break
 
         # double the chunk size (loop at most log(len(pos)) iterations)
-        chunk_size += chunk_size
-        # chunk_size += 1
+        # chunk_size += chunk_size
+        chunk_size += 1
 
     print('SOLUTION:')
     for rule in tracker.best_prog:
