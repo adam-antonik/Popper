@@ -61,6 +61,9 @@ pos_covered(X):-
     pos_index(X,Atom),
     test_ex(Atom),!.
 
+pos_covered_batch(Xs,Ys):-
+    findall(X, (member(X,Xs), pos_index(X,Atom), test_ex(Atom)), Ys).
+
 %% covered(X):-
 %%     ex_index(X,Atom),
 %%     call(Atom),!.

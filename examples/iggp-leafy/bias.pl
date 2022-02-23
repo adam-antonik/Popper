@@ -3,7 +3,7 @@
 %% next_leaf(V0, V1) :- true_leaf(V8, V1), true_leaf(V0, V1), true_leaf(V9, V1), V8 = 3, V9 = 1, pos(V0), pos(V1), pos(V8), pos(V9).
 
 max_vars(5).
-max_body(3).
+max_body(5).
 
 head_pred(next_leaf,3).
 body_pred(close,3).

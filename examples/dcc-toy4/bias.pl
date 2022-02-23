@@ -10,7 +10,7 @@ body_pred(c1,1).
 body_pred(c2,1).
 body_pred(c3,1).
 body_pred(c4,1).
-%% body_pred(c5,1).
+body_pred(c5,1).
 %% body_pred(c6,1).
 %% body_pred(c7,1).
 %% body_pred(c8,1).

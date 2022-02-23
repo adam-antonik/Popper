@@ -29,9 +29,6 @@ class Constrain:
         self.seen_clause_handle = {}
         self.added_clauses = set()
 
-    # def make_literal_handle(self, literal):
-        # return f'{literal.predicate}{"".join(literal.arguments)}'
-
     def make_literal_handle(self, literal):
         return f'{literal.predicate}({".".join(literal.arguments)})'
 

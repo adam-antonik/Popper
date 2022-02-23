@@ -47,9 +47,11 @@ class Tester():
             if recursive:
                 self.prolog.assertz('recursive')
 
+            # print('')
             for rule in rules:
                 head, body = rule
-                self.prolog.assertz(Clause.to_code(Clause.to_ordered(rule)))
+                x = Clause.to_code(Clause.to_ordered(rule))
+                self.prolog.assertz(x)
                 current_clauses.add((head.predicate, head.arity))
             yield
         finally:
@@ -98,6 +100,9 @@ class Tester():
             yield rules[r0], rules[r1]
 
     def pos_covered(self, rules, x):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return False
+
         if rules in self.cached_pos_covered:
             if x in self.cached_pos_covered[rules]:
                 return self.cached_pos_covered[rules][x]
@@ -115,13 +120,41 @@ class Tester():
         self.cached_pos_covered[rules][x] = res
         return res
 
+    def pos_covered_batch(self, rules, xs):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return False
+
+        if rules not in self.cached_pos_covered:
+            self.cached_pos_covered[rules] = {}
+
+        with self.using(rules):
+            ys = set(list(self.prolog.query(f'pos_covered_batch({xs},S)'))[0]['S'])
+            for x in xs:
+                self.cached_pos_covered[rules][x] = x in ys
+
     def pos_covered_all(self, rules):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return set()
+
         return frozenset((self.pos_covered(rules, x) for x in self.pos))
 
     def is_complete(self, rules, pos):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return False
+
+        to_check = []
+        if rules in self.cached_pos_covered:
+            for x in pos:
+                if x not in self.cached_pos_covered[rules]:
+                    to_check.append(x)
+        if len(to_check) > 1:
+            self.pos_covered_batch(rules, to_check)
         return all(self.pos_covered(rules, x) for x in pos)
 
     def is_inconsistent(self, rules):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return False
+
         if rules in self.cached_is_inconsistent:
             return self.cached_is_inconsistent[rules]
 
@@ -131,14 +164,28 @@ class Tester():
         return res
 
     def is_totally_incomplete(self, rules, pos):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return False
+
+        to_check = []
+        if rules in self.cached_pos_covered:
+            for x in pos:
+                if x not in self.cached_pos_covered[rules]:
+                    to_check.append(x)
+        if len(to_check) > 1:
+            self.pos_covered_batch(rules, to_check)
         return all(not self.pos_covered(rules, x) for x in pos)
 
     def all_pos_covered(self, rules):
+        if all(not Clause.is_separable(rule) for rule in rules):
+            return set()
+
         if rules in self.cached_all_pos_covered:
             return self.cached_all_pos_covered[rules]
 
         # if a single rule or non-separable
         if len(rules) == 1 or any(not Clause.is_separable(rule) for rule in rules):
+            # print('all_pos_covered')
             with self.using(rules):
                 res = frozenset(next(self.prolog.query('all_pos_covered(Xs)'))['Xs'])
             self.cached_all_pos_covered[rules] = res
@@ -205,6 +252,11 @@ class Tester():
     #     return frozenset(rules)
 
     def reduce_subset(self, rules, pos):
+        # print('<REDUCE_SUBSET>')
+        # for rule in rules:
+        #     x = Clause.to_code(Clause.to_ordered(rule))
+        #     print(x)
+        # print('</REDUCE_SUBSET>')
         rules = list(rules)
         for i in range(len(rules)):
             subrules = frozenset(rules[:i] + rules[i+1:])
