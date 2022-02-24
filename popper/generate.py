@@ -5,8 +5,9 @@ def gen_args(args):
     return tuple(chr(ord('A') + arg.number) for arg in args)
 
 def generate_program(model):
-    before     = defaultdict(set)
-    min_clause = defaultdict(lambda: 0)
+    # before     = defaultdict(set)
+    # before = []
+    # min_clause = defaultdict(lambda: 0)
     directions = defaultdict(lambda: defaultdict(lambda: '?'))
     clause_id_to_body = defaultdict(set)
     clause_id_to_head = {}
@@ -46,16 +47,16 @@ def generate_program(model):
         # elif atom.name == 'before':
         #     clause1 = atom.arguments[0].number
         #     clause2 = atom.arguments[1].number
-        #     before[clause1].add(clause2)
+        #     before.append((clause1,clause2))
 
         # elif atom.name == 'min_clause':
         #     clause = atom.arguments[0].number
         #     min_clause_num = atom.arguments[1].number
         #     min_clause[clause] = max(min_clause[clause], min_clause_num)
 
-    clauses = []
+    rules = []
+    # min_rule = {}
     for clause_id in clause_id_to_head:
-
         (head_pred, head_args, head_arity) = clause_id_to_head[clause_id]
         head_modes = tuple(directions[head_pred][i] for i in range(head_arity))
         head = Literal(head_pred, head_args, head_modes)
@@ -65,6 +66,9 @@ def generate_program(model):
             body_modes = tuple(directions[body_pred][i] for i in range(body_arity))
             body.add(Literal(body_pred, body_args, body_modes))
         body = frozenset(body)
-        clauses.append((head, body))
-    clauses = frozenset(clauses)
-    return clauses
+        rule = head, body
+        rules.append(rule)
+        # min_rule[rule] = min_clause[clause_id]
+    rules = frozenset(rules)
+    return rules
+    # return rules, before, min_rule

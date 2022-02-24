@@ -68,8 +68,9 @@ pos_covered_batch(Xs,Ys):-
 %%     ex_index(X,Atom),
 %%     call(Atom),!.
 
-%% inconsistent:-
-
+inconsistent:-
+    \+ current_predicate(neg_index/2),!,
+    false.
 
 inconsistent:-
     %% timeout(T),
@@ -110,6 +111,12 @@ redundant_clause(P1):-
     member(C2,P2),
     subsumes(C1,C2),!.
 
+fp(0):-
+    \+ current_predicate(neg_index/2),!.
+
+fp(N):-
+    findall(1, (neg_index(_,Atom), test_ex(Atom)), S),
+    length(S,N).
 
 
 %% TODO: ADD MEANINGFUL COMMENT

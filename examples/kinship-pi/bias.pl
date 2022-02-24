@@ -3,7 +3,7 @@
 %% inv1(A,B) :- father(A,B).
 %% python3 popper.py examples/pi-kinship  0.93s user 0.05s system 100% cpu 0.972 total
 
-max_clauses(4).
+max_clauses(3).
 max_vars(3).
 max_body(2).
 enable_pi.

@@ -1,6 +1,12 @@
 import operator
 from collections import defaultdict
 from . core import ConstVar, Literal, Clause
+import pkg_resources
+from . core import Grounding, ConstVar
+from collections import OrderedDict
+from clingo import Function, Number, Tuple_
+import clingo.script
+clingo.script.enable_python()
 
 def alldiff(args):
     return Literal('AllDifferent', args, meta=True)
@@ -20,64 +26,106 @@ def vo_clause(variable):
 def vo_variable(variable):
     return ConstVar(f'{variable}', 'Variable')
 
-# restrict a clause id to have a specific body size
 def body_size_literal(clause_var, body_size):
     return Literal('body_size', (clause_var, body_size))
 
+def make_literal_handle(literal):
+    return f'{literal.predicate}({".".join(literal.arguments)})'
+
+# def deduce_ordering(rules):
+#     if len(rules) == 1:
+#         return [],[]
+#     # before
+#     # min_clause = {}
+
+#     # bases = []
+#     # recursive = []
+
+#     # for rule in rules:
+#     #     if Clause.is_recursive(rule):
+#     #         recursive.append(rule)
+#     #         min_clause[rule] = 1
+#     #     else:
+#     #         bases.append(rule)
+#     #         min_clause[rule] = 0
+
+#     x = pkg_resources.resource_string(__name__, "lp/ground-bounds.pl").decode()
+#     prog = [x]
+#     rules = list(rules)
+#     for i, rule in enumerate(rules):
+#         head, body = rule
+#         x = f'fact({i},{len(body)},{int(Clause.is_recursive(rule))}).'
+#         prog.append(x)
+#     prog = '\n'.join(prog)
+
+#     print(prog)
+
+#     solver = clingo.Control()
+#     solver.add('base', [], prog)
+#     solver.ground([("base", [])])
+#     with solver.solve(yield_=True) as handle:
+#         for m in handle:
+#             for atom in m.symbols(shown=True):
+#                 print(atom)
+#     return [],[]
+
 class Constrain:
     def __init__(self):
-        self.seen_clause_handle = {}
-        self.added_clauses = set()
+        self.seen_rule_handle = {}
+        self.added_rules = set()
+        # Rule -> Int
+        self.cached_min_rule = {}
+        self.cached_before = defaultdict(list)
 
-    def make_literal_handle(self, literal):
-        return f'{literal.predicate}({".".join(literal.arguments)})'
+    def cache_bounds(self, rules, before, min_rule):
+        self.cached_before[rules] = before
+        self.cached_min_rule.update(min_rule)
 
-    def make_clause_handle(self, clause):
-        if clause in self.seen_clause_handle:
-            return self.seen_clause_handle[clause]
+    def min_rule_literal(self, rule, rule_var):
+        min_rule = self.cached_min_rule[rule]
+        return gteq(rule_var, min_rule)
+
+    def make_rule_handle(self, clause):
+        if clause in self.seen_rule_handle:
+            return self.seen_rule_handle[clause]
         head, body = clause
+        head = make_literal_handle(head)
         body_literals = sorted(body, key = operator.attrgetter('predicate'))
-        head = self.make_literal_handle(head)
-        body = ','.join(self.make_literal_handle(literal) for literal in body_literals)
-        # clause_handle = ''.join(self.make_literal_handle(literal) for literal in [head] + body_literals)
-        # clause_handle = f'"{head}:- {body}"'
+        body = ','.join(make_literal_handle(literal) for literal in body_literals)
         clause_handle = f'{head}:- {body}'
-        self.seen_clause_handle[clause] = clause_handle
+        self.seen_rule_handle[clause] = clause_handle
         return clause_handle
 
     # def make_clause_inclusion_rule(self, clause, min_num=None, clause_handle):
     def make_clause_inclusion_rule(self, clause, clause_handle):
-        if clause_handle in self.added_clauses:
+        if clause_handle in self.added_rules:
             return
             yield
 
-        (head, body) = clause
+        head, body = clause
 
-        self.added_clauses.add(clause_handle)
-        clause_number = vo_clause('l')
+        self.added_rules.add(clause_handle)
+        clause_var = vo_clause('l')
 
         literals = []
-        literals.append(Literal('head_literal', (clause_number, head.predicate, head.arity, tuple(vo_variable(v) for v in head.arguments))))
+        literals.append(Literal('head_literal', (clause_var, head.predicate, head.arity, tuple(vo_variable(v) for v in head.arguments))))
 
         for body_literal in body:
-            literals.append(Literal('body_literal', (clause_number, body_literal.predicate, body_literal.arity, tuple(vo_variable(v) for v in body_literal.arguments))))
+            literals.append(Literal('body_literal', (clause_var, body_literal.predicate, body_literal.arity, tuple(vo_variable(v) for v in body_literal.arguments))))
 
-        # literals.append(gteq(clause_number, min_num))
-
-        # ensure that each var_var is ground to a unique value
-        # literals.append(alldiff(tuple(vo_variable(v) for v in Clause.all_vars(clause))))
+        #literals.append(self.min_rule_literal(clause, clause_var))
 
         for idx, var in enumerate(head.arguments):
             literals.append(eq(vo_variable(var), idx))
 
-        yield (Literal('included_clause', (clause_handle, clause_number)), tuple(literals))
+        yield (Literal('included_clause', (clause_handle, clause_var)), tuple(literals))
 
     # def banish_constraint(self, program, before = {}, min_clause = defaultdict(lambda: 0)):
     # def banish_constraint(self, program):
     #     literals = []
     #     for clause_number, clause in enumerate(program):
     #         (head, body) = clause
-    #         clause_handle = self.make_clause_handle(clause)
+    #         clause_handle = self.make_rule_handle(clause)
     #         yield from self.make_clause_inclusion_rule(clause, min_clause[clause_number], clause_handle)
 
     #         literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
@@ -100,10 +148,12 @@ class Constrain:
     def elimination_constraint(self, program):
         literals = []
         for clause_number, clause in enumerate(program):
+            clause_var = vo_clause(clause_number)
             head, body = clause
-            clause_handle = self.make_clause_handle(clause)
+            clause_handle = self.make_rule_handle(clause)
             yield from self.make_clause_inclusion_rule(clause, clause_handle)
-            literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
+            literals.append(Literal('included_clause', (clause_handle, )))
+            #literals.append(self.min_rule_literal(clause, clause_var))
             # literals.append(body_size_literal(vo_clause(clause_number), len(body)))
 
         # for clause_id1, clause_numbers in before.items():
@@ -123,52 +173,52 @@ class Constrain:
 
         yield (None, tuple(literals))
 
-    def tmp_elimination_constraint(self, handles):
-        literals = []
-        for clause_number, handle in enumerate(handles):
-            literals.append(Literal('included_clause', (handle, vo_clause(clause_number))))
-            # literals.append(body_size_literal(vo_clause(clause_number), len(body)))
+    # def tmp_elimination_constraint(self, handles):
+    #     literals = []
+    #     for clause_number, handle in enumerate(handles):
+    #         literals.append(Literal('included_clause', (handle, vo_clause(clause_number))))
+    #         # literals.append(body_size_literal(vo_clause(clause_number), len(body)))
 
-        # for clause_id1, clause_numbers in before.items():
-        #     for clause_id2 in clause_numbers:
-        #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
+    #     # for clause_id1, clause_numbers in before.items():
+    #     #     for clause_id2 in clause_numbers:
+    #     #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
 
-        # for clause_number, clause in enumerate(program):
-        #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+    #     # for clause_number, clause in enumerate(program):
+    #     #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
 
-        # num_clauses =
-        # ensure that each clause_var is ground to a unique value
-        # literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
-        # literals.append(Literal('clause', (num_clauses, ), positive = False))
+    #     # num_clauses =
+    #     # ensure that each clause_var is ground to a unique value
+    #     # literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+    #     # literals.append(Literal('clause', (num_clauses, ), positive = False))
 
-        # for x in literals:
-        # print(':- ' + ','.join(str(x) for x in literals))
+    #     # for x in literals:
+    #     # print(':- ' + ','.join(str(x) for x in literals))
 
-        yield (None, tuple(literals))
+    #     yield (None, tuple(literals))
 
     # def generalisation_constraint(self, program, before = {}, min_clause = defaultdict(lambda: 0)):
     def generalisation_constraint(self, program):
-
+        program = frozenset(program)
         # if a program is too general (entails a negative example) then rule out any generalisations
         # :- included_clause("next_value(A.B):- c1(B),c2(C),true_value(A.C)",C0),body_size(C0,3).
         # :- included_clause("next_value(A.B):- c1(B),c1(C),my_succ(D.C),true_value(A.D)",C0),body_size(C0,4).
 
         literals = []
         for clause_number, clause in enumerate(program):
-            (_head, body) = clause
-            clause_handle = self.make_clause_handle(clause)
-            # yield from self.make_clause_inclusion_rule(clause, min_clause[clause], clause_handle)
+            _head, body = clause
+            clause_handle = self.make_rule_handle(clause)
             yield from self.make_clause_inclusion_rule(clause, clause_handle)
+            clause_var = vo_clause(clause_number)
+            literals.append(Literal('included_clause', (clause_handle, clause_var)))
+            literals.append(body_size_literal(clause_var, len(body)))
+            #literals.append(self.min_rule_literal(clause, clause_var))
+            # min_rule = self.cached_min_rule[clause]
+            # literals.append(gteq(clause_var, min_rule))
 
-            literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
-            literals.append(body_size_literal(vo_clause(clause_number), len(body)))
-
-        # for clause_id1, clause_numbers in before.items():
-        #     for clause_id2 in clause_numbers:
-        #         literals.append(lt(vo_clause(clause_id1), vo_clause(clause_id2)))
-
-        # for clause_number, clause in enumerate(program):
-        #     literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+        # before = self.cached_before[program]
+        # for r1, r2 in before:
+        #     literals.append(lt(vo_clause(r1), vo_clause(r2)))
+        #     print(r1,r2)
 
         # ensure that each clause_var is ground to a unique value
         if len(program) > 1:
@@ -187,11 +237,15 @@ class Constrain:
         literals = []
 
         for clause_number, clause in enumerate(program):
-            clause_handle = self.make_clause_handle(clause)
+            clause_handle = self.make_rule_handle(clause)
             # yield from self.make_clause_inclusion_rule(clause, min_clause[clause], clause_handle)
             yield from self.make_clause_inclusion_rule(clause, clause_handle)
-            clause_variable = vo_clause(clause_number)
-            literals.append(Literal('included_clause', (clause_handle, clause_variable)))
+            clause_var = vo_clause(clause_number)
+            literals.append(Literal('included_clause', (clause_handle, clause_var)))
+            #literals.append(self.min_rule_literal(clause, clause_var))
+
+            # min_rule = self.cached_min_rule[clause]
+            # literals.append(gteq(clause_var, min_rule))
 
         # for clause_id1, clause_numbers in before.items():
         #     for clause_id2 in clause_numbers:
@@ -209,7 +263,7 @@ class Constrain:
         # prune all rules that rule1 subsumes, where k is the number of literals in the body of rule1
         # :- seen(rule1,C0), seen(rule1,C1), C0 != C1, body_size(C0,k)
         _head1, body1 = rule1
-        rule1_handle = self.make_clause_handle(rule1)
+        rule1_handle = self.make_rule_handle(rule1)
         # yield from self.make_clause_inclusion_rule(rule1, min_clause[rule1], rule1_handle)
         yield from self.make_clause_inclusion_rule(rule1, rule1_handle)
         v1 = vo_clause(0)
@@ -226,8 +280,8 @@ class Constrain:
         # :- seen(rule1,C0), seen(rule2,C1), C0 != C1, body_size(C0,k)
         _head1, body1 = rule1
         literals = []
-        rule1_handle = self.make_clause_handle(rule1)
-        rule2_handle = self.make_clause_handle(rule2)
+        rule1_handle = self.make_rule_handle(rule1)
+        rule2_handle = self.make_rule_handle(rule2)
         # yield from self.make_clause_inclusion_rule(rule1, min_clause[rule1], rule1_handle)
         # yield from self.make_clause_inclusion_rule(rule2, min_clause[rule2], rule2_handle)
         yield from self.make_clause_inclusion_rule(rule1, rule1_handle)
@@ -239,6 +293,8 @@ class Constrain:
         literals.append(Literal('included_clause', (rule1_handle, v1)))
         literals.append(Literal('included_clause', (rule2_handle, v2)))
         literals.append(alldiff((v1, v2)))
+        # literals.append(self.min_rule_literal(rule1, v1))
+        # literals.append(self.min_rule_literal(rule2, v2))
         yield None, tuple(literals)
 
     # AC: THIS CONSTRAINT DUPLICATES THE GENERALISATION CONSTRAINT AND NEEDS REFACTORING
@@ -247,13 +303,13 @@ class Constrain:
         # if min_clause == None:
         #     min_clause = defaultdict(0)
         _head, body = clause
-        clause_handle = self.make_clause_handle(clause)
-        # yield from self.make_clause_inclusion_rule(clause, min_clause[clause], clause_handle)
+        clause_handle = self.make_rule_handle(clause)
         yield from self.make_clause_inclusion_rule(clause, clause_handle)
         literals = []
-        clause_variable = vo_clause(0)
-        literals.append(Literal('included_clause', (clause_handle, clause_variable)))
-        literals.append(body_size_literal(clause_variable, len(body)))
+        clause_var = vo_clause(0)
+        literals.append(Literal('included_clause', (clause_handle, clause_var)))
+        literals.append(body_size_literal(clause_var, len(body)))
+        #literals.append(self.min_rule_literal(clause, clause_var))
         yield (None, tuple(literals))
 
     # Jk: AC, I cleaned this up a bit, but this reorg is for you. Godspeed!
@@ -290,11 +346,13 @@ class Constrain:
             literals = []
 
             for clause_number, clause in enumerate(program):
-                clause_handle = self.make_clause_handle(clause)
+                clause_handle = self.make_rule_handle(clause)
                 # yield from self.make_clause_inclusion_rule(clause, min_clause[clause], clause_handle)
                 yield from self.make_clause_inclusion_rule(clause, clause_handle)
-                clause_variable = vo_clause(clause_number)
-                literals.append(Literal('included_clause', (clause_handle, clause_variable)))
+                clause_var = vo_clause(clause_number)
+                literals.append(Literal('included_clause', (clause_handle, clause_var)))
+                #literals.append(self.min_rule_literal(clause, clause_var))
+
 
             # for clause_id1, clause_numbers in before.items():
             #     for clause_id2 in clause_numbers:

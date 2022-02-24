@@ -1,4 +1,5 @@
-{rule(1..M,1..K)}:-
+%% each rule has at least two atoms
+{rule(1..M,2..K)}:-
     max_rules(M),
     max_rule_size(K).
 
@@ -10,23 +11,24 @@ covers(R,E):-
     min_rule_size(E,N),
     M >= N.
 
+%% every rule must cover an example
 :-
     rule(R,_),
     not covers(R,_).
+
+%% every example must be covered by a rule
 :-
     example(E),
     not covers(_,E).
 
-
-min_literals(N):-
-    #max{K : min_rule_size(_,K)} == N.
+%% min_literals(N):-
+    %% #max{K : min_rule_size(_,K)} == N.
 
 num_rules(N):-
     #count{I : rule(I,_)} == N.
 
 num_literals(N):-
     #sum{K,I : rule(I,K)} == N.
-
 
 %% need at least one rule
 :-
@@ -37,7 +39,7 @@ num_literals(N):-
     rule(I,_),
     #count{K : rule(I,K)} > 1.
 
-%% rules in order
+%% guess rules in order
 :-
     I > 1,
     rule(I,_),
@@ -62,24 +64,7 @@ num_literals(N):-
     num_literals(K),
     K < N.
 
-%% min_literals(11).
-%% min_literals(12).
-
-%% asda:-
-%%     rule(R,K),
-%%     K <= 7,
-%%     covers(R,1),
-%%     covers(R,2).
-
-%% :-
-%%     rule(R,K),
-%%     K <= 3,
-%%     covers(R,3),
-%%     covers(R,4).
-
-%% #show covers/2.
-%% #show rule/2.
-
 #show max_literals/1.
 #show num_rules/1.
 %% #maximize{X : num_rules(X)}.
+%% #maximize{X : num_literals(X)}.

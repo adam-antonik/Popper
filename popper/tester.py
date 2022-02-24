@@ -208,6 +208,12 @@ class Tester():
         self.cached_all_pos_covered[rules] = xs
         return xs
 
+
+    def fp(self, rules):
+        with self.using(rules):
+            return next(self.prolog.query(f'fp(N)'))['N']
+
+
     # def is_incomplete(self, rules, pos):
         # return self.is_complete(self, rules, pos)
 
