@@ -10,7 +10,7 @@ from . asp import ClingoGrounder, ClingoSolver
 from . tester import Tester
 from . constrain import Constrain
 from . generate import generate_program
-from . core import Grounding, Clause, Literal, separable
+from . core import Grounding, Clause, Literal, separable, rule_is_recursive, rule_is_invented, rule_calls_invented
 from collections import defaultdict
 import clingo.script
 clingo.script.enable_python()
@@ -93,6 +93,11 @@ class Tracker:
         self.pos_coverage = {}
         # TMP!!
         self.pos_coverage2 = {}
+
+        self.num_ground_cons = 0
+
+        self.cached_min_rule = {}
+        self.cached_before = {}
 
 
         # VERY HACKY
@@ -224,12 +229,18 @@ def build_constraints(tracker, stats, constrainer, tester, program, pos):
             cons.update(constrainer.subsumption_constraint_pairs(r1, r2))
 
         for rule in program:
+            if rule_is_recursive(rule) or rule_is_invented(rule) or rule_calls_invented(rule):
+                continue
+
             sub_prog = frozenset([rule])
 
             if tester.is_complete(sub_prog, pos):
                 cons.update(constrainer.generalisation_constraint(sub_prog))
             else:
                 cons.update(constrainer.specialisation_constraint(sub_prog))
+
+                if tester.is_totally_incomplete(sub_prog, pos):
+                    cons.update(constrainer.redundancy_constraint(sub_prog))
 
             if tester.is_inconsistent(sub_prog):
                 cons.update(constrainer.generalisation_constraint(sub_prog))
@@ -239,12 +250,6 @@ def build_constraints(tracker, stats, constrainer, tester, program, pos):
             if WITH_CRAP_CHECK:
                 if sub_prog in tracker.seen_crap:
                       cons.update(constrainer.elimination_constraint([rule]))
-
-            if not tester.is_complete(program, pos) and separable(program):
-                for rule in program:
-                    if tester.is_totally_incomplete(frozenset([rule]), pos):
-                        cons.update(constrainer.redundancy_constraint([rule]))
-
     return cons
 
 def cache_rules(tracker, program):
@@ -257,54 +262,11 @@ def cache_rules(tracker, program):
         for rule in program:
             cache_rules(tracker, frozenset([rule]))
 
-# def print_stats(cons, stats, grounder):
-#     print(f'ALL:\t{len(cons.all())}')
-#     print(f'INCS:\t{len(cons.handles)}')
-#     print(f'GENS:\t{len(cons.generalisation)}')
-#     print(f'SPEC:\t{len(cons.specialisation)}')
-#     print(f'SUBS:\t{len(cons.subsumption)}')
-#     print(f'REDU:\t{len(cons.redundancy)}')
-#     ground_cons = bind_vars_in_cons(stats, grounder, cons.all())
-#     print(f'GROUND:\t{len(ground_cons)}')
-#     print(f'GROUND_INCS:\t{len(bind_vars_in_cons(stats, grounder, cons.handles))}')
-#     print(f'GROUND_GENS:\t{len(bind_vars_in_cons(stats, grounder, cons.generalisation))}')
-#     print(f'GROUND_SPEC:\t{len(bind_vars_in_cons(stats, grounder, cons.specialisation))}')
-#     print(f'GROUND_SUBS:\t{len(bind_vars_in_cons(stats, grounder, cons.subsumption))}')
-#     print(f'GROUND_REDU:\t{len(bind_vars_in_cons(stats, grounder, cons.redundancy))}')
-
-# def save_cons(cons, name):
-#     with open(f'{name}.pl', 'w') as f:
-#         f.write('%chandles\n')
-#         for rule in cons.handles:
-#             f.write(Constrain.format_rule_clingo(rule) + '\n')
-#         f.write('%generalisations\n')
-#         for rule in cons.generalisation:
-#             f.write(Constrain.format_rule_clingo(rule) + '\n')
-#         f.write('%specialisation\n')
-#         for rule in cons.specialisation:
-#             f.write(Constrain.format_rule_clingo(rule) + '\n')
-#         f.write('%redundancy\n')
-#         for rule in cons.redundancy:
-#             f.write(Constrain.format_rule_clingo(rule) + '\n')
-#         f.write('%subs\n')
-#         for rule in cons.subsumption:
-#             f.write(Constrain.format_rule_clingo(rule) + '\n')
-#         f.write('%elimination\n')
-#         for rule in cons.elimination:
-#             f.write(Constrain.format_rule_clingo(rule) + '\n')
-
-    # with open(f'{name}.pl', 'w') as f:
-    #     for rule in cons.generalisation | cons.specialisation | cons.elimination:
-    #         f.write(Constrain.format_rule_clingo(rule) + '\n')
-
-    # for rule in cons.covers:
-        # f.write(rule + '.\n')
-
 def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
     settings = tracker.settings
     stats = tracker.stats
     tester = tracker.tester
-    constrainer = Constrain()
+    constrainer = Constrain(tracker)
     solver = ClingoSolver(settings, chunk_bounds.max_rules, chunk_bounds.min_rule_size)
     grounder = ClingoGrounder(chunk_bounds.max_rules, solver.max_vars)
 
@@ -331,9 +293,9 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
                 if not model:
                     break
                 program = generate_program(model)
-                # program, before, min_clause = generate_program(model)
+                constrainer.cache_bounds(program)
                 # return clauses, before, min_clause
-                # constrainer.cache_bounds(program, before, min_clause)
+
 
             # assert(len(program) == num_rules)
             # if size < chunk_bounds.min_literals:
@@ -396,7 +358,7 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
                 cache_rules(tracker, program)
 
             if solution_found:
-                # print('num_ground_rules', num_ground_rules)
+                print('num_ground_rules', tracker.num_ground_cons)
                 return program
 
             # BUILD CONSTRAINTS
@@ -413,7 +375,7 @@ def popper(tracker, pos, neg, bootstap_cons, chunk_bounds):
 
             # ADD CONSTRAINTS TO SOLVER
             with stats.duration('add'):
-                # num_ground_rules += len(ground_cons)
+                tracker.num_ground_cons += len(ground_cons)
                 solver.add_ground_clauses(ground_cons)
     return None
 
@@ -584,7 +546,7 @@ def check_old_programs(tracker, chunk_exs, chunk_bounds):
     # 2. a set of constraints for the other programs
 
     tester = tracker.tester
-    constrainer = Constrain()
+    constrainer = Constrain(tracker)
 
     generalisation = set()
     specialisation = set()

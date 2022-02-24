@@ -72,6 +72,9 @@ class Literal:
         args = ','.join(literal.arguments)
         return f'{literal.predicate}({args})'
 
+    def __lt__(self, other):
+        return (self.predicate < other.predicate) or ((self.predicate == other.predicate) and (self.arguments < other.arguments))
+
     # AC: TODO - REFACTOR
     def __str__(self):
         if self.directions:
@@ -123,6 +126,45 @@ def separable(rules):
         if head.predicate.startswith('inv'):
             return False
     return True
+
+def rule_to_code(rule):
+    head, body = rule
+    head_str = ''
+    if head:
+        head_str = Literal.to_code(head)
+    body_str = ','.join(Literal.to_code(literal) for literal in body)
+    return f'{head_str}:- {body_str}'
+
+def rule_is_recursive(rule):
+    head, body = rule
+    if not head:
+        return False
+    return any(head.predicate  == literal.predicate for literal in body if isinstance(literal, Literal))
+
+def rule_is_invented(rule):
+    head, body = rule
+    if not head:
+        return False
+    # TODO: REPLACE WITH CORRECT REGEX
+    return head.predicate.startswith('inv')
+
+def rule_calls_invented(rule):
+    head, body = rule
+    for atom in body:
+        # TODO: REPLACE WITH CORRECT REGEX
+        if atom.predicate.startswith('inv'):
+            return True
+    return False
+
+
+
+# def rule_to_hash(rule):
+#     head, body = rule
+#     h = None
+#     if head:
+#         h = (head.my_hash(),)
+#     b = frozenset(literal.my_hash() for literal in body)
+#     return hash((h,b))
 
 class Clause:
     @staticmethod

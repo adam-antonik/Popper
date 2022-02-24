@@ -5,36 +5,34 @@ def gen_args(args):
     return tuple(chr(ord('A') + arg.number) for arg in args)
 
 def generate_program(model):
-    # before     = defaultdict(set)
-    # before = []
-    # min_clause = defaultdict(lambda: 0)
     directions = defaultdict(lambda: defaultdict(lambda: '?'))
     clause_id_to_body = defaultdict(set)
     clause_id_to_head = {}
 
     for atom in model:
+        args = atom.arguments
 
         if atom.name == 'body_literal':
-            clause_id = atom.arguments[0].number
-            predicate = atom.arguments[1].name
-            arity = atom.arguments[2].number
-            arguments = gen_args(atom.arguments[3].arguments)
+            clause_id = args[0].number
+            predicate = args[1].name
+            arguments = gen_args(args[3].arguments)
+            arity = len(arguments)
             body_literal = (predicate, arguments, arity)
             clause_id_to_body[clause_id].add(body_literal)
 
         elif atom.name == 'head_literal':
-            clause_id = atom.arguments[0].number
-            predicate = atom.arguments[1].name
-            arity = atom.arguments[2].number
-            args = atom.arguments[3].arguments
-            arguments = gen_args(atom.arguments[3].arguments)
+            clause_id = args[0].number
+            predicate = args[1].name
+            arguments = args[3].arguments
+            arity = len(arguments)
+            arguments = gen_args(arguments)
             head_literal = (predicate, arguments, arity)
             clause_id_to_head[clause_id] = head_literal
 
         elif atom.name == 'direction_':
-            pred_name = atom.arguments[0].name
-            arg_index = atom.arguments[1].number
-            arg_dir_str = atom.arguments[2].name
+            pred_name = args[0].name
+            arg_index = args[1].number
+            arg_dir_str = args[2].name
 
             if arg_dir_str == 'in':
                 arg_dir = '+'
@@ -44,18 +42,7 @@ def generate_program(model):
                 raise Exception(f'Unrecognised argument direction "{arg_dir_str}"')
             directions[pred_name][arg_index] = arg_dir
 
-        # elif atom.name == 'before':
-        #     clause1 = atom.arguments[0].number
-        #     clause2 = atom.arguments[1].number
-        #     before.append((clause1,clause2))
-
-        # elif atom.name == 'min_clause':
-        #     clause = atom.arguments[0].number
-        #     min_clause_num = atom.arguments[1].number
-        #     min_clause[clause] = max(min_clause[clause], min_clause_num)
-
     rules = []
-    # min_rule = {}
     for clause_id in clause_id_to_head:
         (head_pred, head_args, head_arity) = clause_id_to_head[clause_id]
         head_modes = tuple(directions[head_pred][i] for i in range(head_arity))
@@ -68,7 +55,4 @@ def generate_program(model):
         body = frozenset(body)
         rule = head, body
         rules.append(rule)
-        # min_rule[rule] = min_clause[clause_id]
-    rules = frozenset(rules)
-    return rules
-    # return rules, before, min_rule
+    return frozenset(rules)
