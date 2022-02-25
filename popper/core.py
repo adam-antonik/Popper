@@ -2,6 +2,18 @@ from collections import namedtuple, defaultdict
 
 ConstVar = namedtuple('ConstVar', ['name', 'type'])
 
+def all_vars_in_rule(body):
+    all_vars = set()
+    for literal in body:
+        for arg in literal.arguments:
+            if isinstance(arg, ConstVar):
+                all_vars.add(arg)
+            elif isinstance(arg, tuple):
+                for t_arg in arg:
+                    if isinstance(t_arg, ConstVar):
+                        all_vars.add(t_arg)
+    return all_vars
+
 class Grounding:
     @staticmethod
     # IMPROVE/REFACTOR
@@ -33,28 +45,6 @@ class Grounding:
             ground_head = Grounding.ground_literal(head, assignment)
         ground_body = frozenset(Grounding.ground_literal(literal, assignment) for literal in body)
         return (ground_head, ground_body)
-
-    # AC: When grounding constraint rules, we only care about the vars and the constraints, not the actual literals
-    @staticmethod
-    def grounding_hash(body, all_vars):
-        cons = set()
-        for lit in body:
-            if lit.meta:
-                cons.add((lit.predicate, lit.arguments))
-        return hash((frozenset(all_vars), frozenset(cons)))
-
-    @staticmethod
-    def find_all_vars(body):
-        all_vars = set()
-        for literal in body:
-            for arg in literal.arguments:
-                if isinstance(arg, ConstVar):
-                    all_vars.add(arg)
-                elif isinstance(arg, tuple):
-                    for t_arg in arg:
-                        if isinstance(t_arg, ConstVar):
-                            all_vars.add(t_arg)
-        return all_vars
 
 class Literal:
     def __init__(self, predicate, arguments, directions = [], positive = True, meta=False):
@@ -119,13 +109,7 @@ class Literal:
 
 
 def separable(rules):
-    for rule in rules:
-        if Clause.is_recursive(rule):
-            return False
-        head, body = rule
-        if head.predicate.startswith('inv'):
-            return False
-    return True
+    return not any(rule_is_recursive(rule) or rule_is_invented(rule) for rule in rules)
 
 def rule_to_code(rule):
     head, body = rule

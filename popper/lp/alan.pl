@@ -553,6 +553,9 @@ def py_gen_invsym(i):
     return Function(f'inv{i}')
 #end.
 
+pi:-
+    invented(_,_).
+
 %% P IS DEFNED BY AT LEAST TWO CLAUSES
 num_clauses(P,N):-
     head_literal(_,P,_,_),

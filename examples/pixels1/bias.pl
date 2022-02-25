@@ -19,6 +19,12 @@ type(succ,(int, int)).
 %% functional(succ,2).
 %% irreflexive(succ,2).
 
+%% prop(antitransitive,succ).
+%% prop(antitriangular,succ).
+%% prop(unique_a_b,succ).
+%% prop(unique_b_a,succ).
+
+
 %% out(A,B,C):-
 %%     succ(D,E),
 %%     succ(B,F),

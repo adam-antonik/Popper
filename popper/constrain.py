@@ -92,10 +92,12 @@ class Constrain:
         min_rule = self.cached_min_rule[rule]
         return gteq(rule_var, min_rule)
 
-    def before_literals(self, ordered_rules):
-        if len(ordered_rules) == 1:
+    def before_literals(self, rules):
+        if len(rules) == 1:
             return []
-        ordered_rules = tuple(ordered_rules)
+        ordered_rules = tuple(sorted(rules))
+        if ordered_rules not in self.cached_before:
+            self.cached_before[ordered_rules] = deduce_ordering(ordered_rules)
         before = self.cached_before[ordered_rules]
         for r1, r2 in before:
             yield lt(vo_clause(r1), vo_clause(r2))

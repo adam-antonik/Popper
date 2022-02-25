@@ -18,6 +18,8 @@ body_pred(c9,1).
 body_pred(c10,1).
 
 
+:-
+    body_literal(_,tail,_,(1,0)).
 
 
 type(f,(list,)).

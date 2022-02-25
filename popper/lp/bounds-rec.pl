@@ -9,9 +9,13 @@ num_rules(N):-
 num_literals(N):-
     #sum{K,I : rule(I,K)} == N.
 
-%% need at least one rule
+%% need at least two rules for recursion
 :-
-    not rule(1,_).
+    not rule(1..2,_).
+
+%% need at least five literals for recursion
+:-
+    min_literals(1..5).
 
 %% only one guess per rule
 :-

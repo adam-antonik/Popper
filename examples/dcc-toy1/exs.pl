@@ -1,4 +1,5 @@
 pos(f(p1)).
+pos(f(p3)).
 pos(f(p2)).
 
 neg(f(n1)).

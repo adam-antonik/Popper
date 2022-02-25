@@ -17,6 +17,8 @@ body_pred(c5,1).
 %% body_pred(c9,1).
 %% body_pred(c10,1).
 
+:-
+    body_literal(_,tail,_,(1,0)).
 
 
 type(f,(list,)).
@@ -28,3 +30,4 @@ type(c1,(element,)).
 type(c2,(element,)).
 type(c3,(element,)).
 type(c4,(element,)).
+type(c5,(element,)).
