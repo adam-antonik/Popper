@@ -37,34 +37,39 @@ class Tester():
         self.cached_pos_covered = {}
 
     def query_holds(self, query):
+        # with self.tracker.stats.duration('query_holds'):
         return len(list(self.prolog.query(query))) > 0
 
     def first_result(self, query):
+        # with self.tracker.stats.duration('first_result'):
         return list(self.prolog.query(query))[0]
 
     @contextmanager
     def using(self, rules):
-        recursive = prog_is_recursive(rules)
+        recursive = self.tracker.settings.recursion and prog_is_recursive(rules)
         asserted_rules = set()
-        try:
-            with self.tracker.stats.duration('assert'):
-                if recursive:
-                    self.prolog.assertz('recursive')
 
-                # TODO: CHECK THIS
-                for rule in rules:
-                    head, body = rule
-                    x = rule_to_code(order_rule(rule))
-                    self.prolog.assertz(x)
-                    asserted_rules.add((head.predicate, head.arity))
+        # for rule in rules:
+            # print('U',rule_to_code(rule))
+        try:
+            # with self.tracker.stats.duration('assert'):
+            if recursive:
+                self.prolog.assertz('recursive')
+
+            # TODO: CHECK THIS
+            for rule in rules:
+                head, body = rule
+                x = rule_to_code(order_rule(rule))
+                self.prolog.assertz(x)
+                asserted_rules.add((head.predicate, head.arity))
             yield
         finally:
-            with self.tracker.stats.duration('retract'):
-                if recursive:
-                    self.prolog.retractall('recursive')
-                for predicate, arity in asserted_rules:
-                    args = ','.join(['_'] * arity)
-                    self.prolog.retractall(f'{predicate}({args})')
+            # with self.tracker.stats.duration('retract'):
+            if recursive:
+                self.prolog.retractall('recursive')
+            for predicate, arity in asserted_rules:
+                args = ','.join(['_'] * arity)
+                self.prolog.retractall(f'{predicate}({args})')
 
     # ==========
 
@@ -80,6 +85,7 @@ class Tester():
     def is_inconsistent(self, rules):
         if rules in self.cached_is_inconsistent:
             return self.cached_is_inconsistent[rules]
+        # print('is_inconsistent')
         with self.using(rules):
             res = self.query_holds('inconsistent')
         self.cached_is_inconsistent[rules] = res
@@ -89,6 +95,7 @@ class Tester():
         if rules not in self.cached_pos_covered:
             self.cached_pos_covered[rules] = {}
 
+        # print('pos_covered_batch')
         with self.using(rules):
             ys = set(self.first_result(f'pos_covered_batch({xs},S)')['S'])
 
@@ -96,6 +103,7 @@ class Tester():
             self.cached_pos_covered[rules][x] = x in ys
 
     def pos_covered(self, rules, x):
+        # print('pos_covered')
         if rules in self.cached_pos_covered and x in self.cached_pos_covered[rules]:
             return self.cached_pos_covered[rules][x]
 
@@ -103,6 +111,7 @@ class Tester():
 
         # if a single rule or non-separable
         if len(rules) == 1 or not prog_is_separable(rules):
+            print('pos_covered')
             with self.using(rules):
                 res = self.query_holds(f'pos_covered({x})')
             self.cached_pos_covered[rules][x] = res
@@ -113,11 +122,13 @@ class Tester():
         return res
 
     def all_pos_covered(self, rules):
+        # print('all_pos_covered')
         if rules in self.cached_all_pos_covered:
             return self.cached_all_pos_covered[rules]
 
         # if a single rule or non-separable
         if len(rules) == 1 or not prog_is_separable(rules):
+            print('all_pos_covered')
             with self.using(rules):
                 res = frozenset(self.first_result('all_pos_covered(Xs)')['Xs'])
             self.cached_all_pos_covered[rules] = res
@@ -141,6 +152,7 @@ class Tester():
         return xs
 
     def is_totally_incomplete(self, rules, pos):
+        # print('is_totally_incomplete')
         # TODO: COULD CACHE?
         to_check = []
         if rules in self.cached_pos_covered:
@@ -152,6 +164,63 @@ class Tester():
     def fp(self, rules):
         with self.using(rules):
             return self.first_result(f'fp(N)')['N']
+
+    def cache_test_results(self, rules, pos):
+        if rules in self.cached_all_pos_covered:
+            return
+        if rules in self.cached_is_inconsistent:
+            return
+
+        if rules not in self.cached_pos_covered:
+            self.cached_pos_covered[rules] = {}
+        xs = [x for x in pos if x not in self.cached_pos_covered[rules]]
+        with self.using(rules):
+
+            # CHECK WHETHER INCONSISTENT
+            inconsistent = self.query_holds('inconsistent')
+            self.cached_is_inconsistent[rules] = inconsistent
+
+            if inconsistent:
+                # CHECK WHETHER COMPLETE
+                if xs:
+                    ys = frozenset(self.first_result(f'pos_covered_batch({xs},S)')['S'])
+                    for x in xs:
+                        self.cached_pos_covered[rules][x] = x in ys
+                return
+
+            # CHECK WHETHER COVERS ALL EXAMPLES
+            xs = frozenset(self.first_result('all_pos_covered(Xs)')['Xs'])
+            self.cached_all_pos_covered[rules] = xs
+            if rules not in self.cached_pos_covered:
+                self.cached_pos_covered[rules] = {}
+            for x in self.pos:
+                self.cached_pos_covered[rules][x] = x in xs
+
+
+
+            # GET ALL POS COVERED
+            # if len(xs) == 0 or len(xs) == len(self.pos):
+            #     self.cached_all_pos_covered[rules] = ys
+            #     return
+            # print('TESTER.GETALLPOSCOVERED')
+
+# if
+
+# ALWAYS:
+#     tester.is_complete(prog, pos)
+#     tester.is_inconsistent(prog):
+#     rule_has_redundant_literal
+
+# ALWAYS WHEN LEN > 1:
+#   find_redundant_clauses
+
+# IF CONSISTENT:
+#     xs = tracker.tester.all_pos_covered(prog)
+
+# IF_INCOMPLETE:
+#     is_totally_incomplete
+
+
 
 
 
@@ -166,8 +235,12 @@ class Tester():
         rules = list(rules)
         for i in range(len(rules)):
             subrules = frozenset(rules[:i] + rules[i+1:])
-            if self.is_complete(subrules, pos) and not self.is_inconsistent(subrules):
-                return self.reduce_subset(subrules, pos)
+            # print('reduce_subset,is_complete,is_inconsistent')
+            # self.cache_test_results(subrules, pos)
+            if self.is_complete(subrules, pos):
+                if not self.is_inconsistent(subrules):
+                    # print('reduce_subsetis_inconsistent')
+                    return self.reduce_subset(subrules, pos)
         return frozenset(rules)
 
     # def subsumes(self, r1, r2):
@@ -193,7 +266,6 @@ class Tester():
         k = hash(rule)
         if k in self.cached_redundant_literals:
             return self.cached_redundant_literals[k]
-
         head, body = rule
         C = f"[{','.join(('not_'+ literal_to_code(head),) + tuple(literal_to_code(lit) for lit in body))}]"
         has_redundant_literal = self.query_holds(f'redundant_literal({C})')

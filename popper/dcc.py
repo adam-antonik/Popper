@@ -192,6 +192,7 @@ def check_subsumed(tracker, prog):
         return
 
     # all examples covered by program
+    # print('a')
     xs = tracker.tester.all_pos_covered(prog)
 
     asda = False
@@ -231,7 +232,6 @@ def check_subsumed(tracker, prog):
 
     tracker.pos_coverage2[prog] = xs
 
-
 def cache_rules(tracker, rules):
     if rules in tracker.seen_consistent:
         return
@@ -252,6 +252,9 @@ def cache_rules(tracker, rules):
             continue
         if rule_calls_invented(rule):
             continue
+        # TODO: REMOVE REDUNDANCY HERE
+        # print('cache rules inner')
+        # tester.cache_test_results()
         cache_rules(tracker, frozenset([rule]))
 
 def popper(tracker, pos, neg, bootstap_cons, bounds):
@@ -302,19 +305,22 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
             # test hypothesis
             solution_found = False
             with stats.duration('test'):
+                # print('')
+                # print('-- NEW PROG --')
+                tester.cache_test_results(prog, pos)
                 if tester.is_complete(prog, pos) and not tester.is_inconsistent(prog):
                     if not tracker.settings.functional_test or tester.is_functional(prog, pos):
                         solution_found = True
 
             with stats.duration('crap and cache'):
-                # check_crap(tracker, prog)
-                # check_crap2(tracker, prog)
+                # UNSURE IF NEEDED HERE
+                tester.cache_test_results(prog, [])
                 check_subsumed(tracker, prog)
                 if len(prog) > 1:
                     for rule in prog:
-                        check_subsumed(tracker, frozenset([rule]))
-                        # check_crap(tracker, frozenset([rule]))
-                        # check_crap2(tracker, frozenset([rule]))
+                        sub_prog = frozenset([rule])
+                        tester.cache_test_results(sub_prog, [])
+                        check_subsumed(tracker, sub_prog)
                 cache_rules(tracker, prog)
 
             if solution_found:
@@ -626,7 +632,7 @@ def non_recursive_bounds(tracker, pos, max_rule_size, min_rules, max_rules, min_
         max_rules = max_rules_
         _, min_rules = run_clingo_opt(prog, "#minimize{X : num_rules(X)}.")
         _, max_literals = run_clingo_opt(prog, "#maximize{X : num_literals(X)}.")
-    print(f'\tSAT:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
+    # print(f'\tSAT:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
 
     # TODO: MIN RULE SIZE??
     return BoundsStruct(sat, min_rules, max_rules, min_literals, max_literals)
@@ -647,7 +653,7 @@ def recursive_bounds(tracker, max_rule_size, min_rules, max_rules, min_literals,
         _, min_rules = run_clingo_opt(prog, "#minimize{X : num_rules(X)}.")
         _, max_literals = run_clingo_opt(prog, "#maximize{X : num_literals(X)}.")
 
-    print(f'\tSAT-REC:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
+    # print(f'\tSAT-REC:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
     return BoundsStruct(sat, min_rules, max_rules, min_literals, max_literals)
 
 class BoundsStruct:
@@ -811,11 +817,13 @@ def learn_iteration_prog(tracker, chunks):
         # TODO: CHECK WHETHER UNION OF ITERATION_PROG IS A SOLUTION FOR EARLIER PRUNING
 
     iteration_prog = form_union(iteration_progs)
+    tracker.tester.cache_test_results(iteration_prog, pos)
     assert(tracker.tester.is_complete(iteration_prog, all_exs))
     if not tracker.settings.recursion:
         assert(not tracker.tester.is_inconsistent(iteration_prog))
 
     iteration_prog = remove_redundancy(tracker.tester, iteration_prog, all_exs)
+    tracker.tester.cache_test_results(iteration_prog, pos)
     assert(tracker.tester.is_complete(iteration_prog, all_exs))
     if not tracker.settings.recursion:
         assert(not tracker.tester.is_inconsistent(iteration_prog))
@@ -879,7 +887,7 @@ def dcc(settings):
                 update_best_prog(tracker, iteration_prog)
             break
 
-        dbg(f'CHUNK:{chunk_size} size:{num_literals(iteration_prog)} stats:{status}')
+        dbg(f'CHUNK:{chunk_size} size:{num_literals(iteration_prog)} status:{status}')
         # pprint(iteration_prog)
         # for rule in iteration_prog:
             # print(rule_to_code(rule))
@@ -888,10 +896,11 @@ def dcc(settings):
             if best_prog_improvement(tracker, iteration_prog):
                 # update the best program for each example
                 # we logically reduce the iteration_prog with respect to each positive example
+                # print('S:UPDATING BEST PROGS')
+                # TODO: IMPROVE TESTING HERE
                 for ex in flatten(all_chunks):
-                    # print('UPDATING BEST PROGS')
                     tracker.best_progs[ex] = tracker.tester.reduce_subset(iteration_prog, [ex])
-
+                # print('E:UPDATING BEST PROGS')
                 update_best_prog(tracker, iteration_prog)
 
                 if WITH_OPTIMISTIC and tracker.best_prog_errors == 0:

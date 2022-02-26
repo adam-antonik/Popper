@@ -7,15 +7,15 @@ body_pred(head,2).
 body_pred(tail,2).
 body_pred(c0,1).
 body_pred(c1,1).
-%% body_pred(c2,1).
-%% body_pred(c3,1).
-%% body_pred(c4,1).
-%% body_pred(c5,1).
-%% body_pred(c6,1).
-%% body_pred(c7,1).
-%% body_pred(c8,1).
-%% body_pred(c9,1).
-%% body_pred(c10,1).
+body_pred(c2,1).
+body_pred(c3,1).
+body_pred(c4,1).
+body_pred(c5,1).
+body_pred(c6,1).
+body_pred(c7,1).
+body_pred(c8,1).
+body_pred(c9,1).
+body_pred(c10,1).
 
 
 :-
