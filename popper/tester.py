@@ -111,7 +111,7 @@ class Tester():
 
         # if a single rule or non-separable
         if len(rules) == 1 or not prog_is_separable(rules):
-            print('pos_covered')
+            # print('pos_covered')
             with self.using(rules):
                 res = self.query_holds(f'pos_covered({x})')
             self.cached_pos_covered[rules][x] = res
@@ -128,7 +128,7 @@ class Tester():
 
         # if a single rule or non-separable
         if len(rules) == 1 or not prog_is_separable(rules):
-            print('all_pos_covered')
+            # print('all_pos_covered')
             with self.using(rules):
                 res = frozenset(self.first_result('all_pos_covered(Xs)')['Xs'])
             self.cached_all_pos_covered[rules] = res

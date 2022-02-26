@@ -1,6 +1,7 @@
 max_vars(4).
-max_body(3).
+max_body(2).
 enable_recursion.
+%% enable_pi.
 
 head_pred(out,3).
 body_pred(in,3).
@@ -15,21 +16,13 @@ type(succ,(int, int)).
     clause(C),
     #count{V : clause_var(C,V),var_type(C,V,ex)} != 1.
 
-%%
+
 %% functional(succ,2).
 %% irreflexive(succ,2).
 
+%% DIAGONAL
 
-
-%% in(2,3).
-
-
-%% out(A,B,blue):- succ(A,A1), in(A1,B,black).
-%% out(A,B,blue):- succ(B,B1), in(A,B1,black).
-%% out(A,B,blue):- succ(B,B1), in(A,B1,black).
-%% out(A,B,blue):- succ(B,B1), in(A,B1,black).
-
-
-
-%% 11,21,31,41
-%% 21,22,32,42
+%% out(A,B,C):-in(A,B,C).
+%% out(A,B,C):-succ(C,B),out(A,C,D),succ(D,B).
+%% out(A,B,C):-succ(D,C),out(A,C,D),succ(D,B).
+%% out(A,B,C):-succ(B,C),succ(D,B),out(A,D,B).

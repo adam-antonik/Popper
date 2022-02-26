@@ -2,6 +2,7 @@
 
 :-table (out/3) as incremental.
 :-dynamic([out/3], [incremental(true)]).
+%% SURROUND A PIXEL
 
 in(e1,1,1).
 %% out(e1,0,1).

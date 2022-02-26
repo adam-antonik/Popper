@@ -529,15 +529,18 @@ def check_old_programs(tracker, pos, bounds):
 
             cons.update(constrainer.elimination_constraint(prog))
 
-    # if tracker.best_prog:
-    #     assert(tracker.tester.is_complete(tracker.best_prog, pos))
-    #     assert(not tracker.tester.is_inconsistent(tracker.best_prog))
-    #     for sub_prog in powerset(tracker.best_prog):
-    #         if num_literals(sub_prog) > max_literals:
-    #             continue
-    #         if num_literals(sub_prog) < min_literals:
-    #             continue
-    #         specialisation.update(constrainer.specialisation_constraint(sub_prog))
+    if tracker.best_prog:
+        assert(tracker.tester.is_complete(tracker.best_prog, pos))
+        assert(not tracker.tester.is_inconsistent(tracker.best_prog))
+        for sub_prog in powerset(tracker.best_prog):
+            if num_literals(sub_prog) > max_literals:
+                continue
+            if num_literals(sub_prog) < bounds.min_literals:
+                continue
+            # print('SUBSET')
+            # for rule in sub_prog:
+            #     print(rule_to_code(rule))
+            cons.update(constrainer.specialisation_constraint(sub_prog))
 
     # cons = Constraints(tracker, generalisation, specialisation, redundancy, subsumption, elimination)
     return chunk_prog, cons
@@ -683,17 +686,25 @@ class Bounds2:
         self.non_rec = BoundsStruct(True, self.min_rules, min(self.max_rules, len(pos)), self.min_literals, self.max_literals)
         self.rec = BoundsStruct(True, self.min_rules, self.max_rules, self.min_literals, self.max_literals)
 
+        # print('A')
         if any(x not in tracker.min_size for x in pos):
             return
+        # print('B')
 
         if all(tracker.best_progs[x] != None for x in pos):
             self.min_literals = max(num_literals(tracker.best_progs[x]) for x in pos)
+
+        # print('B')
 
         if prog:
             # TODO: CHECK WITH RECURSION
             self.max_rules = min(self.max_rules, len(prog))
             self.max_literals = min(self.max_literals, num_literals(prog))
             self.max_literals -= 1
+        else:
+            return
+
+        # print('C')
 
         self.non_rec = non_recursive_bounds(tracker, pos, self.max_rule_size_, self.min_rules, self.max_rules, self.min_literals, self.max_literals)
         self.sat = self.non_rec.sat
@@ -720,10 +731,13 @@ def process_chunk(tracker, pos, iteration_progs):
 
     # if we cannot learn something smaller, then this chunk program is the union of all the solutions for the smaller chunks
     bounds = Bounds2(tracker, prog, pos)
+    # print('bounds', prog)
     if not bounds.sat:
+        # print('bounds.sat', bounds.sat)
         return prog
 
     if WITH_LAZINESS:
+        # print('WITH_LAZINESS')
         # try to reuse an already found hypothesis
         better_seen = reuse_seen(tracker, pos, iteration_progs, bounds.max_literals)
         if better_seen:

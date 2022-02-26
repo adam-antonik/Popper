@@ -19,7 +19,6 @@ type(succ,(int, int)).
 %% functional(succ,2).
 %% irreflexive(succ,2).
 
-%% SURROUND THE INPUT PIXEL
 %% DIAGONAL
 
 %% out(A,B,C):-in(A,B,C).

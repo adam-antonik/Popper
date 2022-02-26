@@ -29,29 +29,30 @@
 %% in(e2,1,2).
 %% in(e2,2,3).
 %% %% =>
+pos(out(e2,1,1)).
 pos(out(e2,1,2)).
-pos(out(e2,2,3)).
-pos(out(e2,3,4)).
-pos(out(e2,4,5)).
-pos(out(e1,2,2)).
-pos(out(e1,1,1)).
-pos(out(e1,3,3)).
-pos(out(e1,4,4)).
-pos(out(e1,5,5)).
+pos(out(e2,1,3)).
+pos(out(e2,1,4)).
+pos(out(e2,1,5)).
 
-neg(out(e2,1,1)).
-neg(out(e2,2,2)).
-neg(out(e2,1,3)).
-neg(out(e2,4,3)).
-neg(out(e2,1,1)).
-neg(out(e2,4,2)).
-neg(out(e2,4,1)).
-neg(out(e2,3,2)).
-neg(out(e1,1,2)).
-neg(out(e1,1,4)).
-neg(out(e1,1,3)).
-neg(out(e1,4,1)).
-neg(out(e1,3,3)).
+pos(out(e1,2,1)).
+pos(out(e1,2,2)).
+pos(out(e1,2,3)).
+pos(out(e1,2,4)).
+pos(out(e1,2,5)).
+
+%% neg(out(e2,1,1)).
+%% neg(out(e2,2,2)).
+%% neg(out(e2,1,3)).
+%% neg(out(e2,4,3)).
+%% neg(out(e2,1,1)).
+%% neg(out(e2,4,2)).
+%% neg(out(e2,4,1)).
+%% neg(out(e2,3,2)).
+%% neg(out(e1,1,4)).
+%% neg(out(e1,1,3)).
+%% neg(out(e1,4,1)).
+%% neg(out(e1,3,3)).
 
 
 
