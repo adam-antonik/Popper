@@ -5,7 +5,7 @@ import logging
 import copy
 from time import perf_counter
 from contextlib import contextmanager
-from .core import Clause
+from .core import *
 from .constrain import Constrain
 
 TIMEOUT=600

@@ -1,12 +1,12 @@
 import operator
 from collections import defaultdict
-from . core import ConstVar, Literal, Clause, rule_to_code, rule_is_recursive, rule_is_invented
 import pkg_resources
-from . core import Grounding, ConstVar
-from collections import OrderedDict
+from . core import *
 from clingo import Function, Number, Tuple_
 import clingo.script
 clingo.script.enable_python()
+
+GROUND_BOUNDS = pkg_resources.resource_string(__name__, "lp/ground-bounds.pl").decode()
 
 def alldiff(args):
     return Literal('AllDifferent', args, meta=True)
@@ -49,15 +49,16 @@ def deduce_min_rule(rule):
 def deduce_ordering(ordered_rules):
     if len(ordered_rules) == 1:
         return []
-    x = pkg_resources.resource_string(__name__, "lp/ground-bounds.pl").decode()
-    prog = [x]
+
+    prog = []
     for i, rule in enumerate(ordered_rules):
         head, body = rule
         level = 0
         if rule_is_invented(rule):
             level = int(head.predicate[-1])
-        x = f'rule({i},{head.predicate},{len(body)},{int(Clause.is_recursive(rule))},{level}). '
+        x = f'rule({i},{head.predicate},{len(body)},{int(rule_is_recursive(rule))},{level}). '
         prog.append(x)
+    prog.append(GROUND_BOUNDS)
     # TODO: CHECK THESE VALUES IN CACHE!!!
     prog = '\n'.join(prog)
     solver = clingo.Control()
@@ -250,7 +251,7 @@ class Constrain:
         for clause in program:
             (head, _) = clause
             lits_num_clauses[head.predicate] += 1
-            if Clause.is_recursive(clause):
+            if rule_is_recursive(clause):
                 lits_num_recursive_clauses[head.predicate] += 1
 
         recursively_called = set()
@@ -258,7 +259,7 @@ class Constrain:
             something_added = False
             for clause in program:
                 (head, body) = clause
-                is_rec = Clause.is_recursive(clause)
+                is_rec = rule_is_recursive(clause)
                 for body_literal in body:
                     if body_literal.predicate not in lits_num_clauses:
                         continue

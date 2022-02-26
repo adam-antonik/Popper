@@ -5,7 +5,7 @@ import clingo
 import operator
 import numbers
 import pkg_resources
-from . core import Grounding, ConstVar, all_vars_in_rule
+from . core import *
 from collections import OrderedDict
 from clingo import Function, Number, Tuple_
 import clingo.script
@@ -151,9 +151,6 @@ class ClingoSolver():
 
         # add bias
         bias = []
-        with open(settings.bias_file) as f:
-            bias.append(f.read())
-
         bias.append(f'max_clauses({bounds.max_rules}).')
 
         if settings.recursion:
@@ -172,12 +169,14 @@ class ClingoSolver():
                 for i in range(1, bounds.non_rec.min_rule_size):
                     bias.append(f':- not recursive, body_size(_,{i}).')
             if bounds.non_rec.max_rules < bounds.max_rules:
-                bias.append(f':- not recursive, clause({bounds.non_rec.max_rules}).')
+                bias.append(f':- not pi_or_rec, clause({bounds.non_rec.max_rules}).')
         else:
-            bias.append(f'pi_or_rec:- recursive.')
-            bias.append(f'pi_or_rec:- pi.')
             bias.append(f':- not pi_or_rec.')
-            # bias.append(f':- not recursive.')
+
+        # print('\n'.join(bias))
+
+        with open(settings.bias_file) as f:
+            bias.append(f.read())
 
         # print('\n'.join(bias))
         self.solver.add('base', [], '\n'.join(bias))

@@ -23,6 +23,9 @@
 %% #show min_clause/2.
 #show direction_/3.
 
+pi_or_rec:- recursive.
+pi_or_rec:- pi.
+
 %% HEAD PRED SYMBOL IF GIVEN BY USER OR INVENTED
 head_aux(P,A):-
     head_pred(P,A).

@@ -14,37 +14,39 @@ def all_vars_in_rule(body):
                         all_vars.add(t_arg)
     return all_vars
 
-class Grounding:
-    @staticmethod
-    # IMPROVE/REFACTOR
-    def ground_literal(literal, assignment):
-        ground_args = []
-        for arg in literal.arguments:
-            if arg in assignment:
-                ground_args.append(assignment[arg])
-            # handles tuples of ConstVars
-            # TODO: AC: EXPLAIN BETTER
-            elif isinstance(arg, tuple):
-                ground_t_args = []
-                # AC: really messy
-                for t_arg in arg:
-                    if t_arg in assignment:
-                        ground_t_args.append(assignment[t_arg])
-                    else:
-                        ground_t_args.append(t_arg)
-                ground_args.append(tuple(ground_t_args))
-            else:
-                ground_args.append(arg)
-        return (literal.positive, literal.predicate, tuple(ground_args))
+def ground_literal(literal, assignment):
+    ground_args = []
+    for arg in literal.arguments:
+        if arg in assignment:
+            ground_args.append(assignment[arg])
+        # handles tuples of ConstVars
+        # TODO: AC: EXPLAIN BETTER
+        elif isinstance(arg, tuple):
+            ground_t_args = []
+            # AC: really messy
+            for t_arg in arg:
+                if t_arg in assignment:
+                    ground_t_args.append(assignment[t_arg])
+                else:
+                    ground_t_args.append(t_arg)
+            ground_args.append(tuple(ground_t_args))
+        else:
+            ground_args.append(arg)
+    return (literal.positive, literal.predicate, tuple(ground_args))
 
-    @staticmethod
-    def ground_clause(clause, assignment):
-        (head, body) = clause
-        ground_head = None
-        if head:
-            ground_head = Grounding.ground_literal(head, assignment)
-        ground_body = frozenset(Grounding.ground_literal(literal, assignment) for literal in body)
-        return (ground_head, ground_body)
+def ground_rule(rule, assignment):
+    head, body = rule
+    ground_head = None
+    if head:
+        ground_head = ground_literal(head, assignment)
+    ground_body = frozenset(ground_literal(literal, assignment) for literal in body)
+    return ground_head, ground_body
+
+
+
+def literal_to_code(literal):
+    args = ','.join(literal.arguments)
+    return f'{literal.predicate}({args})'
 
 class Literal:
     def __init__(self, predicate, arguments, directions = [], positive = True, meta=False):
@@ -56,11 +58,6 @@ class Literal:
         self.meta = meta
         self.inputs = frozenset(arg for direction, arg in zip(self.directions, self.arguments) if direction == '+')
         self.outputs = frozenset(arg for direction, arg in zip(self.directions, self.arguments) if direction == '-')
-
-    @staticmethod
-    def to_code(literal):
-        args = ','.join(literal.arguments)
-        return f'{literal.predicate}({args})'
 
     def __lt__(self, other):
         return (self.predicate < other.predicate) or ((self.predicate == other.predicate) and (self.arguments < other.arguments))
@@ -107,6 +104,11 @@ class Literal:
     def my_hash(self):
         return hash((self.predicate, self.arguments))
 
+def prog_is_recursive(rules):
+    return any(rule_is_recursive(rule) for rule in rules)
+
+def prog_is_separable(rules):
+    return separable(rules)
 
 def separable(rules):
     return not any(rule_is_recursive(rule) or rule_is_invented(rule) for rule in rules)
@@ -115,8 +117,8 @@ def rule_to_code(rule):
     head, body = rule
     head_str = ''
     if head:
-        head_str = Literal.to_code(head)
-    body_str = ','.join(Literal.to_code(literal) for literal in body)
+        head_str = literal_to_code(head)
+    body_str = ','.join(literal_to_code(literal) for literal in body)
     return f'{head_str}:- {body_str}'
 
 def rule_is_recursive(rule):
@@ -140,96 +142,34 @@ def rule_calls_invented(rule):
             return True
     return False
 
+def order_rule(clause):
+    (head, body) = clause
+    ordered_body = []
+    grounded_variables = head.inputs
+    body_literals = set(body)
 
+    if head.inputs == []:
+        return clause
 
-# def rule_to_hash(rule):
-#     head, body = rule
-#     h = None
-#     if head:
-#         h = (head.my_hash(),)
-#     b = frozenset(literal.my_hash() for literal in body)
-#     return hash((h,b))
+    while body_literals:
+        selected_literal = None
+        for literal in body_literals:
+            # AC: could cache for a micro-optimisation
+            if literal.inputs.issubset(grounded_variables):
+                if literal.predicate != head.predicate:
+                    # find the first ground non-recursive body literal and stop
+                    selected_literal = literal
+                    break
+                else:
+                    # otherwise use the recursive body literal
+                    selected_literal = literal
 
-class Clause:
-    @staticmethod
-    def to_code(clause):
-        (head, body) = clause
-        head_str = ''
-        if head:
-            head_str = Literal.to_code(head)
-        body_str = ','.join(Literal.to_code(literal) for literal in body)
-        return head_str + ':-' + body_str
+        if selected_literal == None:
+            message = f'{selected_literal} in clause {self} could not be grounded'
+            raise ValueError(message)
 
-    @staticmethod
-    def clause_hash(clause):
-        (head, body) = clause
-        h = None
-        if head:
-            h = (head.my_hash(),)
-        b = frozenset(literal.my_hash() for literal in body)
-        return hash((h,b))
+        ordered_body.append(selected_literal)
+        grounded_variables = grounded_variables.union(selected_literal.outputs)
+        body_literals = body_literals.difference({selected_literal})
 
-    @staticmethod
-    def is_recursive(clause):
-        (head, body) = clause
-        if not head:
-            return False
-        return head.predicate in set(literal.predicate for literal in body if isinstance(literal, Literal))
-
-    @staticmethod
-    def is_separable(rule):
-        if Clause.is_recursive(rule):
-            return False
-        head, body = rule
-        if head.predicate.startswith('inv'):
-            return False
-        return True
-
-    @staticmethod
-    def all_vars(clause):
-        (head, body) = clause
-        xs = set()
-        if head:
-            xs.update(head.arguments)
-        for literal in body:
-            for arg in literal.arguments:
-                if isinstance(arg, ConstVar):
-                    xs.add(arg)
-                elif isinstance(arg, tuple):
-                    for t_arg in arg:
-                        if isinstance(t_arg, ConstVar):
-                            xs.add(t_arg)
-        return xs
-
-    @staticmethod
-    def to_ordered(clause):
-        (head, body) = clause
-        ordered_body = []
-        grounded_variables = head.inputs
-        body_literals = set(body)
-
-        if head.inputs == []:
-            return clause
-
-        while body_literals:
-            selected_literal = None
-            for literal in body_literals:
-                # AC: could cache for a micro-optimisation
-                if literal.inputs.issubset(grounded_variables):
-                    if literal.predicate != head.predicate:
-                        # find the first ground non-recursive body literal and stop
-                        selected_literal = literal
-                        break
-                    else:
-                        # otherwise use the recursive body literal
-                        selected_literal = literal
-
-            if selected_literal == None:
-                message = f'{selected_literal} in clause {self} could not be grounded'
-                raise ValueError(message)
-
-            ordered_body.append(selected_literal)
-            grounded_variables = grounded_variables.union(selected_literal.outputs)
-            body_literals = body_literals.difference({selected_literal})
-
-        return (head, tuple(ordered_body))
+    return (head, tuple(ordered_body))
