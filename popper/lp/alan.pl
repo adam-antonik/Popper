@@ -4,8 +4,8 @@
 %% VERSION 15
 %% ##################################################
 
-#defined functional/2.
-#defined irreflexive/2.
+%% #defined functional/2.
+%% #defined irreflexive/2.
 #defined direction/2.
 #defined type/2.
 #defined size/1.
@@ -19,8 +19,6 @@
 
 #show head_literal/4.
 #show body_literal/4.
-%% #show before/2.
-%% #show min_clause/2.
 #show direction_/3.
 
 pi_or_rec:- recursive.
@@ -286,45 +284,45 @@ head_connected(C,Var1):-
     body_var(C,Var),
     not head_connected(C,Var).
 
-%% IRREFLEXIVE
-%% prevents: head:-q(A,B),q(B,A)
-:-
-    irreflexive(P,2),
-    body_literal(C,P,2,Vars1),
-    body_literal(C,P,2,Vars2),
-    Vars1 = (Var1,Var2),
-    Vars2 = (Var2,Var1),
-    Vars1 < Vars2.
+%% %% IRREFLEXIVE
+%% %% prevents: head:-q(A,B),q(B,A)
+%% :-
+%%     irreflexive(P,2),
+%%     body_literal(C,P,2,Vars1),
+%%     body_literal(C,P,2,Vars2),
+%%     Vars1 = (Var1,Var2),
+%%     Vars2 = (Var2,Var1),
+%%     Vars1 < Vars2.
 
-%% AC TODO: GENERALISE THE BELOW
-%% DYADIC FUNCTIONAL
-%% CAN REPLICATE RECALL
-%% prevents: head:- q(+A,-B),q(+A,-C)
-:-
-    functional(P,2),
-    body_literal(C,P,2,(V1,_)),
-    #count{V2 : body_literal(C,P,2,(V1,V2))} > 1.
+%% %% AC TODO: GENERALISE THE BELOW
+%% %% DYADIC FUNCTIONAL
+%% %% CAN REPLICATE RECALL
+%% %% prevents: head:- q(+A,-B),q(+A,-C)
+%% :-
+%%     functional(P,2),
+%%     body_literal(C,P,2,(V1,_)),
+%%     #count{V2 : body_literal(C,P,2,(V1,V2))} > 1.
 
-%% TRIADIC FUNCTIONAL
-%% prevents: head:- q(+A,+B,-C),q(+A,+B,-D)
-:-
-    functional(P,3),
-    direction_(P,0,in),
-    direction_(P,1,in),
-    direction_(P,2,out),
-    body_literal(C,P,_,(V1,V2,_)),
-    #count{V3 : body_literal(C,P,_,(V1,V2,V3))} > 1.
+%% %% TRIADIC FUNCTIONAL
+%% %% prevents: head:- q(+A,+B,-C),q(+A,+B,-D)
+%% :-
+%%     functional(P,3),
+%%     direction_(P,0,in),
+%%     direction_(P,1,in),
+%%     direction_(P,2,out),
+%%     body_literal(C,P,_,(V1,V2,_)),
+%%     #count{V3 : body_literal(C,P,_,(V1,V2,V3))} > 1.
 
 %% TETRADIC (fancy) FUNCTIONAL
 %% prevents: head:- q(+A,+B,-C,-D),q(+A,+B,-D,-E)
-:-
-    functional(P,4),
-    direction_(P,0,in),
-    direction_(P,1,in),
-    direction_(P,2,out),
-    direction_(P,3,out),
-    body_literal(C,P,_,(V1,V2,_,_)),
-    #count{(V3,V4) : body_literal(C,P,_,(V1,V2,V3,V4))} > 1.
+%% :-
+%%     functional(P,4),
+%%     direction_(P,0,in),
+%%     direction_(P,1,in),
+%%     direction_(P,2,out),
+%%     direction_(P,3,out),
+%%     body_literal(C,P,_,(V1,V2,_,_)),
+%%     #count{(V3,V4) : body_literal(C,P,_,(V1,V2,V3,V4))} > 1.
 
 %% ##################################################
 %% SUBSUMPTION

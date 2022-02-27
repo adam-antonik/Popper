@@ -1,5 +1,5 @@
 max_vars(4).
-max_body(2).
+max_body(4).
 enable_recursion.
 %% enable_pi.
 

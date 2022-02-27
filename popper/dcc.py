@@ -29,16 +29,14 @@ WITH_MIN_RULE_SIZE = True
 WITH_MAX_RULE_BOUND = False
 WITH_MAX_RULE_BOUND = True
 WITH_CRAP_CHECK = False
-WITH_CRAP_CHECK = True
+# WITH_CRAP_CHECK = True
 WITH_BOOTSTRAPPING = False
 WITH_BOOTSTRAPPING = True
 WITH_SUBSUMPTION = False
 WITH_SUBSUMPTION = True
-WITH_COVERAGE_CHECK = False
+# WITH_COVERAGE_CHECK = False
 # WITH_COVERAGE_CHECK = True
-# MAX_RULES = 3
 MAX_RULES = 6
-# MAX_RULES = 10
 MAX_LITERALS = 20
 
 NON_REC_BOUNDS_FILE = pkg_resources.resource_string(__name__, "lp/bounds.pl").decode()
@@ -59,14 +57,13 @@ class Tracker:
         self.best_progs = {}
         self.seen_consistent = set()
         self.seen_inconsistent = set()
+
         self.seen_crap = set()
         self.pos_coverage = {}
-        # TMP!!
         self.pos_coverage2 = {}
 
         self.cached_min_rule = {}
         self.cached_before = {}
-
 
         # VERY HACKY
         with open(settings.bias_file) as f:
@@ -160,7 +157,7 @@ def build_constraints(tracker, stats, constrainer, tester, program, pos):
         for rule in program:
             sub_prog = frozenset([rule])
 
-            if not separable(sub_prog) or rule_calls_invented(rule):
+            if rule_is_recursive(rule) or rule_calls_invented(rule) or rule_is_invented(rule):
                 continue
 
             if tester.is_complete(sub_prog, pos):
@@ -248,9 +245,7 @@ def cache_rules(tracker, rules):
         return
 
     for rule in rules:
-        if rule_is_recursive(rule):
-            continue
-        if rule_calls_invented(rule):
+        if rule_is_recursive(rule) or rule_is_invented(rule) or rule_calls_invented(rule):
             continue
         # TODO: REMOVE REDUNDANCY HERE
         # print('cache rules inner')
@@ -293,7 +288,7 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
             tracker.stats.total_programs += 1
 
             if tracker.settings.debug:
-                print('--')
+                print('-- NEW PROG --')
                 for rule in prog:
                     print(rule_to_code(rule))
 
@@ -305,8 +300,6 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
             # test hypothesis
             solution_found = False
             with stats.duration('test'):
-                # print('')
-                # print('-- NEW PROG --')
                 tester.cache_test_results(prog, pos)
                 if tester.is_complete(prog, pos) and not tester.is_inconsistent(prog):
                     if not tracker.settings.functional_test or tester.is_functional(prog, pos):
@@ -318,6 +311,8 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
                 check_subsumed(tracker, prog)
                 if len(prog) > 1:
                     for rule in prog:
+                        if rule_is_recursive(rule) or rule_calls_invented(rule) or rule_is_invented(rule):
+                            continue
                         sub_prog = frozenset([rule])
                         tester.cache_test_results(sub_prog, [])
                         check_subsumed(tracker, sub_prog)
@@ -529,18 +524,18 @@ def check_old_programs(tracker, pos, bounds):
 
             cons.update(constrainer.elimination_constraint(prog))
 
-    if tracker.best_prog:
-        assert(tracker.tester.is_complete(tracker.best_prog, pos))
-        assert(not tracker.tester.is_inconsistent(tracker.best_prog))
-        for sub_prog in powerset(tracker.best_prog):
-            if num_literals(sub_prog) > max_literals:
-                continue
-            if num_literals(sub_prog) < bounds.min_literals:
-                continue
+    # if tracker.best_prog:
+    #     assert(tracker.tester.is_complete(tracker.best_prog, pos))
+    #     assert(not tracker.tester.is_inconsistent(tracker.best_prog))
+    #     for sub_prog in powerset(tracker.best_prog):
+    #         if num_literals(sub_prog) > max_literals:
+    #             continue
+    #         if num_literals(sub_prog) < bounds.min_literals:
+    #             continue
             # print('SUBSET')
             # for rule in sub_prog:
             #     print(rule_to_code(rule))
-            cons.update(constrainer.specialisation_constraint(sub_prog))
+            # cons.update(constrainer.specialisation_constraint(sub_prog))
 
     # cons = Constraints(tracker, generalisation, specialisation, redundancy, subsumption, elimination)
     return chunk_prog, cons
@@ -635,7 +630,7 @@ def non_recursive_bounds(tracker, pos, max_rule_size, min_rules, max_rules, min_
         max_rules = max_rules_
         _, min_rules = run_clingo_opt(prog, "#minimize{X : num_rules(X)}.")
         _, max_literals = run_clingo_opt(prog, "#maximize{X : num_literals(X)}.")
-    # print(f'\tSAT:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
+    print(f'\tSAT:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
 
     # TODO: MIN RULE SIZE??
     return BoundsStruct(sat, min_rules, max_rules, min_literals, max_literals)
@@ -656,7 +651,7 @@ def recursive_bounds(tracker, max_rule_size, min_rules, max_rules, min_literals,
         _, min_rules = run_clingo_opt(prog, "#minimize{X : num_rules(X)}.")
         _, max_literals = run_clingo_opt(prog, "#maximize{X : num_literals(X)}.")
 
-    # print(f'\tSAT-REC:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
+    print(f'\tSAT-REC:{sat}, MIN_RULES:{min_rules} MAX_RULES:{max_rules} MIN_LITERALS:{min_literals} MAX_LITERALS:{max_literals}')
     return BoundsStruct(sat, min_rules, max_rules, min_literals, max_literals)
 
 class BoundsStruct:
@@ -731,9 +726,7 @@ def process_chunk(tracker, pos, iteration_progs):
 
     # if we cannot learn something smaller, then this chunk program is the union of all the solutions for the smaller chunks
     bounds = Bounds2(tracker, prog, pos)
-    # print('bounds', prog)
     if not bounds.sat:
-        # print('bounds.sat', bounds.sat)
         return prog
 
     if WITH_LAZINESS:
@@ -781,7 +774,6 @@ def process_chunk(tracker, pos, iteration_progs):
         if prog:
             for x in pos:
                 tracker.best_progs[x] = prog
-                # print('UPDATING BEST PROG DURING FAILURE', x, num_literals(prog))
         return prog
 
     prog = new_solution

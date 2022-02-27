@@ -1,4 +1,3 @@
-%% max_clauses(1).
 max_vars(6).
 max_body(6).
 
@@ -10,11 +9,6 @@ max_body(6).
 %% 10:17:46 next(A,B):-my_input(E,C),c_c(C),does(A,E,C),c_q(D),my_true(A,D),c_r(B)
 %% 10:17:46 next(A,B):-my_input(C,D),c_p(B),c_c(D),my_true(A,B),does(A,C,D)
 %% 10:17:46 next(A,B):-c_b(E),does(A,C,E),c_q(D),c_p(B),my_input(C,E),my_true(A,D)
-
-%% 10:51:35 next(A,B):-my_true(A,C),my_succ(C,B)
-%% 10:51:35 next(A,B):-my_input(E,C),c_q(B),does(A,E,C),c_p(D),my_true(A,D),c_b(C)
-%% 10:51:35 next(A,B):-does(A,C,E),c_b(E),role(C),my_true(A,D),c_p(B),c_q(D)
-
 
 head_pred(next,2).
 body_pred(does,3).
@@ -29,10 +23,6 @@ body_pred(c_a,1).
 body_pred(c_b,1).
 body_pred(c_c,1).
 body_pred(not_my_true,2).
-
-%% 10:56:00 next(A,B):-c_p(B),my_input(E,D),c_q(C),my_true(A,C),c_b(D),does(A,E,D)
-%% 10:56:00 next(A,B):-my_true(A,E),does(A,D,C),c_q(B),my_input(D,C),c_b(C),c_p(E)
-
 
 type(next,(ex,prop)).
 type(does,(ex,agent,action)).

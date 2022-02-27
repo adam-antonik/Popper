@@ -1,5 +1,5 @@
 max_vars(4).
-max_body(3).
+max_body(4).
 enable_recursion.
 
 head_pred(out,3).

@@ -48,15 +48,11 @@ class Tester():
     def using(self, rules):
         recursive = self.tracker.settings.recursion and prog_is_recursive(rules)
         asserted_rules = set()
-
-        # for rule in rules:
-            # print('U',rule_to_code(rule))
         try:
             # with self.tracker.stats.duration('assert'):
             if recursive:
                 self.prolog.assertz('recursive')
 
-            # TODO: CHECK THIS
             for rule in rules:
                 head, body = rule
                 x = rule_to_code(order_rule(rule))
@@ -226,21 +222,27 @@ class Tester():
 
     # TO REFACTOR!!!!!# TO REFACTOR!!!!!# TO REFACTOR!!!!!# TO REFACTOR!!!!!# TO REFACTOR!!!!!# TO REFACTOR!!!!!
 
+    seen_subset = set()
+
     def reduce_subset(self, rules, pos):
-        # print('<REDUCE_SUBSET>')
-        # for rule in rules:
-        #     x = Clause.to_code(Clause.to_ordered(rule))
-        #     print(x)
-        # print('</REDUCE_SUBSET>')
+        # k = (rules, frozenset(pos))
+        # if k in self.seen_subset:
+        #     print('SEEEN')
+        # else:
+        #     self.seen_subset.add(k)
+        # with self.tracker.stats.duration('reduce_subset'):
         rules = list(rules)
         for i in range(len(rules)):
             subrules = frozenset(rules[:i] + rules[i+1:])
-            # print('reduce_subset,is_complete,is_inconsistent')
-            # self.cache_test_results(subrules, pos)
-            if self.is_complete(subrules, pos):
-                if not self.is_inconsistent(subrules):
-                    # print('reduce_subsetis_inconsistent')
-                    return self.reduce_subset(subrules, pos)
+
+            if len(subrules) == 1:
+                rule = list(subrules)[0]
+                if rule_is_recursive(rule) or rule_calls_invented(rule) or rule_is_invented(rule):
+                    continue
+
+            if self.is_complete(subrules, pos) and not self.is_inconsistent(subrules):
+                return self.reduce_subset(subrules, pos)
+
         return frozenset(rules)
 
     # def subsumes(self, r1, r2):

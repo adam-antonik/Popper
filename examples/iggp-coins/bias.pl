@@ -2,9 +2,8 @@
 %% next_cell(A,B,C):-role(E),does_jump(A,E,D,B),c_twocoins(C),different(D,B).
 %% next_cell(A,B,C):-role(D),different(B,E),my_true_cell(A,B,C),different(B,F),does_jump(A,D,E,F).
 
-
 max_vars(6).
-max_body(5).
+max_body(6).
 
 head_pred(next_cell,3).
 body_pred(does_jump,4).

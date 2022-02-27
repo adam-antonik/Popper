@@ -11,3 +11,11 @@ enable_pi.
 head_pred(grandparent,2).
 body_pred(mother,2).
 body_pred(father,2).
+
+
+:-
+    invented(inv2,_).
+
+:-
+    head_literal(C,inv1,_,_),
+    body_size(C,2).
