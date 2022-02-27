@@ -48,6 +48,9 @@ class Tester():
     def using(self, rules):
         recursive = self.tracker.settings.recursion and prog_is_recursive(rules)
         asserted_rules = set()
+        # print('assert')
+        # for rule in rules:
+        #     print('A', rule_to_code(rule))
         try:
             # with self.tracker.stats.duration('assert'):
             if recursive:
