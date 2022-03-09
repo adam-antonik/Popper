@@ -40,6 +40,7 @@ MAX_RULES = 6
 MAX_RULES = 3
 MAX_LITERALS = 20
 
+ALAN_FILE = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
 NON_REC_BOUNDS_FILE = pkg_resources.resource_string(__name__, "lp/bounds.pl").decode()
 REC_BOUNDS_FILE = pkg_resources.resource_string(__name__, "lp/bounds-rec.pl").decode()
 
@@ -47,7 +48,6 @@ class Tracker:
     def __init__(self, settings):
         self.settings = settings
         self.min_total_literals = 1
-        # self.max_total_literals = None
         self.min_total_rules = 1
         self.max_total_rules = MAX_RULES
         self.min_size = {}
@@ -66,11 +66,21 @@ class Tracker:
         self.cached_min_rule = {}
         self.cached_before = {}
 
-        # VERY HACKY
+        solver = clingo.Control()
+        solver.add('base', [], ALAN_FILE)
         with open(settings.bias_file) as f:
-            f_txt = f.read()
-            self.settings.recursion = 'enable_recursion' in f_txt
-            self.settings.predicate_invention = 'enable_pi' in f_txt
+            solver.add('base', [], f.read())
+        solver.add('base', [], '\n' + f'max_clauses({MAX_RULES}).')
+        solver.ground([('base', [])])
+
+        max_body_atoms = solver.symbolic_atoms.by_signature('max_body', arity=1)
+        settings.max_body_atoms = next(max_body_atoms).symbol.arguments[0].number
+
+        max_vars_atoms = solver.symbolic_atoms.by_signature('max_vars', arity=1)
+        settings.max_vars = next(max_vars_atoms).symbol.arguments[0].number
+
+        settings.recursion = len(list(solver.symbolic_atoms.by_signature('enable_recursion', arity=0))) > 0
+        settings.predicate_invention = len(list(solver.symbolic_atoms.by_signature('enable_pi', arity=0))) > 0
 
         self.settings.WITH_OPTIMISTIC = WITH_OPTIMISTIC
         self.settings.WITH_CHUNKING = WITH_CHUNKING
@@ -78,7 +88,8 @@ class Tracker:
         self.settings.WITH_MIN_RULE_SIZE = WITH_MIN_RULE_SIZE and not (self.settings.recursion or self.settings.predicate_invention)
         self.tester = Tester(self)
         # self.max_total_literals = settings.max_literals
-        self.stats = Stats(log_best_programs=settings.info)
+        # self.stats = Stats(log_best_programs=settings.info)
+        self.stats = Stats()
         self.pos = frozenset(self.tester.pos)
         self.neg = frozenset(self.tester.neg)
         self.best_progs = {ex:None for ex in self.pos}
@@ -395,6 +406,7 @@ def check_old_programs(tracker, pos, bounds):
     cons = set()
     chunk_prog = None
 
+
     # check consistent programs
     for prog in tracker.seen_consistent:
 
@@ -506,8 +518,27 @@ def form_union(progs):
         union.update(prog)
     return frozenset(union)
 
-def remove_redundancy(tester, old_prog, pos):
-    new_prog = tester.reduce_subset(old_prog, pos)
+def remove_redundancy(tracker, old_prog, pos):
+    tester = tracker.tester
+    stats = tracker.stats
+
+    # print('OLD')
+    # pprint(old_prog)
+    # with stats.duration('reduce_new'):
+    new_prog = tester.reduce_subset2(old_prog, pos)
+    # new_prog = tester.reduce_subset(old_prog, pos)
+    # print('TEST')
+    # pprint(old_prog)
+    # with stats.duration('reduce_old'):
+
+    # print('NEW')
+    # pprint(new_prog)
+    # assert(len(test_prog) == len(new_prog))
+    # assert(tester.all_pos_covered(old_prog) == tester.all_pos_covered(test_prog))
+    # assert(tester.is_complete(test_prog, pos))
+
+    # print('NEW PROG')
+    # pprint(new_prog)
     assert(tester.is_complete(old_prog, pos))
     assert(tester.is_complete(new_prog, pos))
     old_success_set = tester.all_pos_covered(old_prog)
@@ -529,11 +560,12 @@ def get_union_of_example_progs(tracker, pos):
     if not tracker.settings.recursion:
         assert(not tracker.tester.is_inconsistent(prog))
 
-    prog = remove_redundancy(tracker.tester, prog, pos)
+    prog = remove_redundancy(tracker, prog, pos)
     assert(tracker.tester.is_complete(prog, pos))
     if not tracker.settings.recursion:
         assert(not tracker.tester.is_inconsistent(prog))
-    assert(len(prog) == len(tracker.tester.reduce_subset(prog, pos)))
+    # assert(len(prog) == len(tracker.tester.reduce_subset(prog, pos)))
+    assert(len(prog) == len(tracker.tester.reduce_subset2(prog, pos)))
 
     if tracker.tester.is_inconsistent(prog):
         print('SHIT!!!!!!!!!!!'*4)
@@ -693,6 +725,7 @@ def process_chunk(tracker, pos, iteration_progs):
         # print('WITH_LAZINESS')
         # try to reuse an already found hypothesis
         better_seen = reuse_seen(tracker, pos, iteration_progs, bounds.max_literals)
+        # print('better_seen',better_seen)
         if better_seen:
             prog = better_seen
             assert(tracker.tester.is_complete(prog, pos))
@@ -785,7 +818,7 @@ def learn_iteration_prog(tracker, chunks):
     if not tracker.settings.recursion:
         assert(not tracker.tester.is_inconsistent(iteration_prog))
 
-    iteration_prog = remove_redundancy(tracker.tester, iteration_prog, all_exs)
+    iteration_prog = remove_redundancy(tracker, iteration_prog, all_exs)
     tracker.tester.cache_test_results(iteration_prog, pos)
     assert(tracker.tester.is_complete(iteration_prog, all_exs))
     if not tracker.settings.recursion:
@@ -808,30 +841,20 @@ def perform_chunking(tracker):
             tmp_chunks[prog].add(ex)
     return list(tmp_chunks.values())
 
-def load_bias_setting(settings):
-    ALAN_FILE = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
-    solver = clingo.Control()
-    solver.add('base', [], ALAN_FILE)
-    with open(settings.bias_file) as f:
-        solver.add('base', [], f.read())
-    solver.add('base', [], '\n' + f'max_clauses({MAX_RULES}).')
-    solver.ground([('base', [])])
 
-    max_body_atoms = solver.symbolic_atoms.by_signature('max_body', arity=1)
-    settings.max_body_atoms = next(max_body_atoms).symbol.arguments[0].number
 
-    max_vars_atoms = solver.symbolic_atoms.by_signature('max_vars', arity=1)
-    settings.max_vars = next(max_vars_atoms).symbol.arguments[0].number
+    # settings.recursion = 'enable_recursion' in f_txt
+    # settings.predicate_invention = 'enable_pi' in f_txt
 
-    # max_clauses_atoms = self.solver.symbolic_atoms.by_signature('max_clauses', arity=1)
+    # max_clauses_atoms =
     # settings.max_clauses = next(max_clauses_atoms).symbol.arguments[0].number
 
 def dcc(settings):
     # maintain stuff during the search
     tracker = Tracker(settings)
-    load_bias_setting(settings)
 
     # size of the chunks/partitions of the examples
+    chunk_size = 1000
     chunk_size = 1
 
     # initially partitions each example into its own partition
@@ -857,7 +880,8 @@ def dcc(settings):
             # we logically reduce the iteration_prog with respect to each positive example
             # TODO: IMPROVE TESTING HERE
             for ex in flatten(all_chunks):
-                tracker.best_progs[ex] = tracker.tester.reduce_subset(iteration_prog, [ex])
+                # tracker.best_progs[ex] = tracker.tester.reduce_subset(iteration_prog, [ex])
+                tracker.best_progs[ex] = tracker.tester.reduce_subset2(iteration_prog, [ex])
             update_best_prog(tracker, iteration_prog)
 
             if WITH_OPTIMISTIC and tracker.best_prog_errors == 0:

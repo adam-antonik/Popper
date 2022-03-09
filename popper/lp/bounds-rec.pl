@@ -15,7 +15,7 @@ num_literals(N):-
 
 %% need at least five literals for recursion
 :-
-    min_literals(1..5).
+    num_literals(1..5).
 
 %% only one guess per rule
 :-

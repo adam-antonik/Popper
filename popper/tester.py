@@ -304,3 +304,38 @@ class Tester():
             r0 = dic['R0']
             r1 = dic['R1']
             yield rules[r0], rules[r1]
+
+
+    def reduce_subset2(self, rules, pos):
+        rules = list(rules)
+        asserted_rules = set()
+
+        # assert auxiliary relations for pos examples we car about
+        for x in pos:
+            self.prolog.assertz(f'subset_pos_index({x})')
+
+        # enumerate the rules
+        for i, rule in enumerate(rules):
+            head, body = rule
+            r = rule_to_code(order_rule(rule))
+            # prepend an argument for the rule id
+            r = r.replace(f'{head.predicate}(', f'{head.predicate}({i},')
+            # assert to the db
+            self.prolog.assertz(r)
+            asserted_rules.add((head.predicate, head.arity+1))
+
+        # call prolog to find the minimal subset of the rules
+        # the result is a list of rule ids
+        res = self.first_result(f'reduce({list(range(len(rules)))},L)')['L']
+
+        # retract auxiliary facts
+        self.prolog.retractall(f'subset_pos_index(_)')
+
+        # retract added rules
+        for predicate, arity in asserted_rules:
+            args = ','.join(['_'] * arity)
+            self.prolog.retractall(f'{predicate}({args})')
+
+        return frozenset([rules[i] for i in res])
+
+

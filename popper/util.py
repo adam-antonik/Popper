@@ -10,9 +10,10 @@ from .constrain import Constrain
 
 TIMEOUT=600
 EVAL_TIMEOUT=0.001
-MAX_LITERALS=100
+MAX_LITERALS=20
 MAX_SOLUTIONS=1
 CLINGO_ARGS=''
+MAX_RULES=3
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Popper, an ILP engine based on learning from failures')
@@ -20,9 +21,10 @@ def parse_args():
     parser.add_argument('--eval-timeout', type=float, default=EVAL_TIMEOUT, help='Prolog evaluation timeout in seconds')
     parser.add_argument('--timeout', type=float, default=TIMEOUT, help='Overall timeout (in seconds)')
     parser.add_argument('--max-literals', type=int, default=MAX_LITERALS, help='Maximum number of literals allowed in program')
+    parser.add_argument('--max-rules', type=int, default=MAX_RULES, help='Maximum number of rules allowed in program')
     # parser.add_argument('--max-solutions', type=int, default=MAX_SOLUTIONS, help='Maximum number of solutions to print')
-    parser.add_argument('--test-all', default=False, action='store_true', help='Test all examples')
-    parser.add_argument('--info', default=False, action='store_true', help='Print best programs so far to stderr')
+    # parser.add_argument('--test-all', default=False, action='store_true', help='Test all examples')
+    # parser.add_argument('--info', default=False, action='store_true', help='Print best programs so far to stderr')
     parser.add_argument('--debug', default=False, action='store_true', help='Print debugging information to stderr')
     parser.add_argument('--stats', default=False, action='store_true', help='Print statistics at end of execution')
     parser.add_argument('--hspace', type=int, default=-1, help='Show the full hypothesis space')
@@ -68,11 +70,11 @@ def parse_settings():
         bias_file,
         args.ex_file if args.ex_file else ex_file,
         args.bk_file if args.bk_file else bk_file,
-        info = args.info,
+        # info = args.info,
         debug = args.debug,
         stats = args.stats,
         eval_timeout = args.eval_timeout,
-        test_all = args.test_all,
+        # test_all = args.test_all,
         timeout = args.timeout,
         max_literals = args.max_literals,
         clingo_args= [] if not args.clingo_args else args.clingo_args.split(' '),
@@ -86,13 +88,14 @@ class Settings:
             bias_file,
             ex_file,
             bk_file,
-            info = False,
+            # info = False,
             debug = False,
             stats = False,
             eval_timeout = EVAL_TIMEOUT,
-            test_all = False,
+            # test_all = False,
             timeout = TIMEOUT,
             max_literals = MAX_LITERALS,
+            max_rules = MAX_RULES,
             clingo_args = CLINGO_ARGS,
             max_solutions = MAX_SOLUTIONS,
             functional_test = False,
@@ -101,13 +104,14 @@ class Settings:
         self.bias_file = bias_file
         self.ex_file = ex_file
         self.bk_file = bk_file
-        self.info = info
+        # self.info = info
         self.debug = debug
         self.stats = stats
         self.eval_timeout = eval_timeout
-        self.test_all = test_all
+        # self.test_all = test_all
         self.timeout = timeout
         self.max_literals = max_literals
+        self.max_rules = max_rules
         self.clingo_args = clingo_args
         self.max_solutions = max_solutions
         self.functional_test = functional_test
@@ -180,10 +184,10 @@ class Stats:
     def register_best_program(self, program, conf_matrix):
         prog_stats = self.make_program_stats(program, conf_matrix)
         self.best_programs.append(prog_stats)
-        if self.log_best_programs:
-            self.logger.info(f'% NEW BEST PROG {self.total_programs}:')
-            self.logger.info(prog_stats.code)
-            self.logger.info(format_conf_matrix(conf_matrix))
+        # if self.log_best_programs:
+            # self.logger.info(f'% NEW BEST PROG {self.total_programs}:')
+            # self.logger.info(prog_stats.code)
+            # self.logger.info(format_conf_matrix(conf_matrix))
 
     def log_final_result(self):
         if self.solution:
