@@ -23,9 +23,9 @@ WITH_OPTIMISTIC = False
 WITH_CHUNKING = True
 WITH_LAZINESS = True
 WITH_MIN_LITERALS = False
-WITH_MIN_LITERALS = True
+# WITH_MIN_LITERALS = True
 WITH_MIN_RULE_SIZE = False
-WITH_MIN_RULE_SIZE = True
+# WITH_MIN_RULE_SIZE = True
 WITH_MAX_RULE_BOUND = False
 WITH_MAX_RULE_BOUND = True
 WITH_CRAP_CHECK = False
@@ -36,9 +36,9 @@ WITH_SUBSUMPTION = False
 WITH_SUBSUMPTION = True
 # WITH_COVERAGE_CHECK = False
 # WITH_COVERAGE_CHECK = True
-MAX_RULES = 6
-MAX_RULES = 3
-MAX_LITERALS = 20
+# MAX_RULES = 6
+# MAX_RULES = 3
+# MAX_LITERALS = 20
 
 ALAN_FILE = pkg_resources.resource_string(__name__, "lp/alan.pl").decode()
 NON_REC_BOUNDS_FILE = pkg_resources.resource_string(__name__, "lp/bounds.pl").decode()
@@ -49,7 +49,7 @@ class Tracker:
         self.settings = settings
         self.min_total_literals = 1
         self.min_total_rules = 1
-        self.max_total_rules = MAX_RULES
+        self.max_total_rules = settings.max_rules
         self.min_size = {}
         self.no_single_rule_solutions = []
         self.best_prog = None
@@ -70,7 +70,7 @@ class Tracker:
         solver.add('base', [], ALAN_FILE)
         with open(settings.bias_file) as f:
             solver.add('base', [], f.read())
-        solver.add('base', [], '\n' + f'max_clauses({MAX_RULES}).')
+        solver.add('base', [], '\n' + f'max_clauses({settings.max_rules}).')
         solver.ground([('base', [])])
 
         max_body_atoms = solver.symbolic_atoms.by_signature('max_body', arity=1)
@@ -264,7 +264,13 @@ def cache_rules(tracker, rules):
         # tester.cache_test_results()
         cache_rules(tracker, frozenset([rule]))
 
+
 def popper(tracker, pos, neg, bootstap_cons, bounds):
+
+    # c0 = 0
+    # c1 = 0
+    # c2 = 0
+
     settings = tracker.settings
     stats = tracker.stats
     tester = tracker.tester
@@ -283,11 +289,17 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
 
     dbg(f'Running Popper min_rules:{bounds.min_rules} max_rules:{bounds.max_rules} min_literals:{bounds.min_literals} max_literals:{bounds.max_literals}')
 
+    # seen_before1 = tracker.seen_consistent | tracker.seen_inconsistent
+
     for size in range(min_size, bounds.max_literals + 1):
         dbg(f'num_literals:{size}')
         solver.update_number_of_literals(size)
 
+        # seen_before2 = tracker.seen_consistent | tracker.seen_inconsistent
+
         while True:
+
+            # seen_before3 = tracker.seen_consistent | tracker.seen_inconsistent
 
             # generate hypothesis
             with stats.duration('generate'):
@@ -299,15 +311,51 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
 
             tracker.stats.total_programs += 1
 
+            # seen_all1 = True
+            # seen_all2 = True
+            # seen_all3 = True
+            # for rule in prog:
+            #     sub_prog = frozenset([rule])
+            #     if sub_prog not in seen_before1:
+            #         seen_all1 = False
+            #     if sub_prog not in seen_before2:
+            #         seen_all2 = False
+            #     if sub_prog not in seen_before3:
+            #         seen_all3 = False
+            #     # if sub_prog in seen_before1:
+            #         # assert(sub_prog in tracker.seen_consistent)
+            #         # print(rule_to_code(rule), 'seen_before1')
+            #     # else:
+            #         # if sub_prog in seen_before2:
+            #             # print(rule_to_code(rule), 'seen_before2')
+            # if seen_all1:
+            #     c0 +=1
+            #     c1 +=1
+            #     c2 +=1
+            #     print('-- SEEN ALL1 --', c0)
+            #     for rule in prog:
+            #         print(rule_to_code(rule))
+            # elif seen_all2:
+            #     c1 +=1
+            #     c2 +=1
+            #     print('-- SEEN ALL2 --', c1)
+            #     for rule in prog:
+            #         print(rule_to_code(rule))
+            # elif seen_all3:
+            #     c2 +=1
+            #     print('-- SEEN ALL3 --', c2)
+            #     for rule in prog:
+            #         print(rule_to_code(rule))
+
             if tracker.settings.debug:
                 print('-- NEW PROG --')
                 for rule in prog:
                     print(rule_to_code(rule))
 
-            # TMP!!!!
-            if tracker.best_prog:
-                if prog.issubset(tracker.best_prog):
-                    print('SUBSET'*10)
+            # # TMP!!!!
+            # if tracker.best_prog:
+            #     if prog.issubset(tracker.best_prog):
+            #         print('SUBSET'*10)
 
             # test hypothesis
             solution_found = False
@@ -352,7 +400,7 @@ def popper(tracker, pos, neg, bootstap_cons, bounds):
 def dbg(*args):
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
-    print(current_time, *args)
+    print('%', current_time, *args)
 
 def pprint(prog):
     for rule in prog:
@@ -568,11 +616,11 @@ def get_union_of_example_progs(tracker, pos):
     assert(len(prog) == len(tracker.tester.reduce_subset2(prog, pos)))
 
     if tracker.tester.is_inconsistent(prog):
-        print('SHIT!!!!!!!!!!!'*4)
+        # print('SHIT!!!!!!!!!!!'*4)
         return None
 
-    dbg(f'BEST_SO_FAR size:{num_literals(prog)}')
-    pprint(prog)
+    # dbg(f'BEST_SO_FAR size:{num_literals(prog)}')
+    # pprint(prog)
 
     return prog
 
@@ -637,6 +685,8 @@ def recursive_bounds(tracker, max_rule_size, min_rules, max_rules, min_literals,
     prog.append(REC_BOUNDS_FILE)
     prog = '\n'.join(prog)
 
+    # print(prog)
+
     sat, max_rules_ = run_clingo_opt(prog, "#maximize{X : num_rules(X)}.")
     if sat:
         max_rules = max_rules_
@@ -654,79 +704,101 @@ class BoundsStruct:
         self.min_literals = min_literals
         self.max_literals = max_literals
         self.min_rule_size = 1
+        self.exists_min_rule_size = 1
 
 class Bounds2:
+    # prog is the best prog so far but could be None
     def __init__(self, tracker, prog, pos):
         self.max_rule_size_ = tracker.settings.max_body_atoms+1
         self.min_rules = 1
-        self.max_rules = MAX_RULES
+        self.max_rules = tracker.settings.max_rules
         self.min_literals = 1
-        self.max_literals = MAX_LITERALS
+        self.max_literals = tracker.settings.max_literals
         self.rec = None
         self.non_rec = None
         self.sat = True
 
-        if not (tracker.settings.recursion or tracker.settings.predicate_invention):
-            self.max_rules = min(self.max_rules, len(pos))
+        # if no pi or recursion, we cannot have more rules than the number of examples
+        # if not (tracker.settings.recursion or tracker.settings.predicate_invention):
+            # self.max_rules = min(self.max_rules, len(pos))
 
         # defaults
         self.non_rec = BoundsStruct(True, self.min_rules, min(self.max_rules, len(pos)), self.min_literals, self.max_literals)
-        self.rec = BoundsStruct(True, self.min_rules, self.max_rules, self.min_literals, self.max_literals)
 
-        # print('A')
+        self.rec = BoundsStruct(tracker.settings.recursion or tracker.settings.predicate_invention, self.min_rules, self.max_rules, self.min_literals, self.max_literals)
+
+        # if searching for the first time, use the defaults
         if any(x not in tracker.min_size for x in pos):
             return
-        # print('B')
 
+        # min literals is the smallest program needed to cover any one of the examples
         if all(tracker.best_progs[x] != None for x in pos):
             self.min_literals = max(num_literals(tracker.best_progs[x]) for x in pos)
 
-        # print('B')
-
-        if prog:
-            # TODO: CHECK WITH RECURSION
-            self.max_rules = min(self.max_rules, len(prog))
-            self.max_literals = min(self.max_literals, num_literals(prog))
-            self.max_literals -= 1
-        else:
+        if prog == None:
             return
 
-        # print('C')
+        # TODO: CHECK WITH RECURSION
+        # update bounds based on the union prog
+        self.max_rules = min(self.max_rules, len(prog))
+        self.max_literals = min(self.max_literals, num_literals(prog))
+        self.max_literals -= 1
 
         self.non_rec = non_recursive_bounds(tracker, pos, self.max_rule_size_, self.min_rules, self.max_rules, self.min_literals, self.max_literals)
         self.sat = self.non_rec.sat
-
-        if self.sat:
-            self.max_rules = self.non_rec.max_rules
-            self.max_literals = self.non_rec.max_literals
 
         if tracker.settings.recursion or tracker.settings.predicate_invention:
             self.rec = recursive_bounds(tracker, self.max_rule_size_, self.min_rules, self.max_rules, self.min_literals, self.max_literals)
             if self.rec.sat:
                 self.sat = True
-                self.max_rules = self.non_rec.max_rules
-                self.max_literals = self.non_rec.max_literals
 
-# def recursive_bounds(tracker, max_rule_size, min_rules, max_rules, min_literals, max_literals):
+        if not self.sat:
+            return
+
+        # print('self.max_rules', self.max_rules)
+        # print('self.non_rec.max_rules', self.non_rec.max_rules)
+        # print('self.non_rec.max_literals', self.non_rec.max_literals)
+        max_rules_ = self.non_rec.max_rules
+        max_literals_ = self.non_rec.max_literals
+
+        if self.rec.sat:
+            # print('hello')
+            max_rules_ = max(max_rules_, self.rec.max_rules)
+            max_literals_ = max(max_literals_, self.rec.max_literals)
+        self.max_rules = max_rules_
+        self.max_literals = max_literals_
+
+        # print('self.max_rules', self.max_rules)
+        # print('self.max_literals', self.max_literals)
+
+
+        if WITH_MIN_RULE_SIZE:
+            min_size = min(tracker.min_size[x] for x in pos)
+            exists_min_size = max(tracker.min_size[x] for x in pos)
+            self.non_rec.min_rule_size = min_size
+            self.non_rec.exists_min_rule_size = exists_min_size
 
 def process_chunk(tracker, pos, iteration_progs):
     prog = get_union_of_example_progs(tracker, pos)
 
     # union can be inconsistent when there is recursion
     if prog and tracker.tester.is_inconsistent(prog):
+        # print('if prog and tracker.tester.is_inconsistent(prog):')
         prog = None
 
     # if we cannot learn something smaller, then this chunk program is the union of all the solutions for the smaller chunks
     bounds = Bounds2(tracker, prog, pos)
     if not bounds.sat:
+        # print('if not bounds.sat:')
         return prog
 
     if WITH_LAZINESS:
         # print('WITH_LAZINESS')
         # try to reuse an already found hypothesis
         better_seen = reuse_seen(tracker, pos, iteration_progs, bounds.max_literals)
-        # print('better_seen',better_seen)
         if better_seen:
+            # print('BETTER_SEEN1')
+            # pprint(prog)
             prog = better_seen
             assert(tracker.tester.is_complete(prog, pos))
             assert(not tracker.tester.is_inconsistent(prog))
@@ -745,6 +817,8 @@ def process_chunk(tracker, pos, iteration_progs):
 
         # this program might not be in the hypothesis, so we might need to search for a smaller one
         if better_seen:
+            # print('BETTER_SEEN2')
+            # pprint(better_seen)
             prog = better_seen
             assert(tracker.tester.is_complete(prog, pos))
             assert(not tracker.tester.is_inconsistent(prog))
@@ -795,7 +869,7 @@ def learn_iteration_prog(tracker, chunks):
 
         prog = process_chunk(tracker, pos, iteration_progs)
         if not prog:
-            print('NO PROG')
+            # print('NO PROG')
             continue
 
         # chunk_prog is guaranteed to be complete, consistent, and smaller than the previous best
@@ -853,8 +927,10 @@ def dcc(settings):
     # maintain stuff during the search
     tracker = Tracker(settings)
 
+    # print('TRACKER.SETTINGS.RECURSION', tracker.settings.recursion)
+
     # size of the chunks/partitions of the examples
-    chunk_size = 1000
+    # chunk_size = 1000
     chunk_size = 1
 
     # initially partitions each example into its own partition
@@ -869,6 +945,7 @@ def dcc(settings):
         iteration_prog, status = learn_iteration_prog(tracker, chunks)
 
         if status == OPTIMAL:
+            # print('OPTIMAL')
             if best_prog_improvement(tracker, iteration_prog):
                 update_best_prog(tracker, iteration_prog)
             break
@@ -891,13 +968,14 @@ def dcc(settings):
             all_chunks = perform_chunking(tracker)
 
         if len(all_chunks) == 1 or chunk_size > len(tracker.pos):
+            # i('BREAK')
             break
 
         # double the chunk size (loop at most log(len(pos)) iterations)
-        # chunk_size += chunk_size
-        chunk_size += 1
+        chunk_size += chunk_size
+        # chunk_size +=
 
-    print('SOLUTION:')
+    print('% SOLUTION:')
     for rule in tracker.best_prog:
         print(rule_to_code(rule) + '.')
     return tracker.best_prog, tracker.stats

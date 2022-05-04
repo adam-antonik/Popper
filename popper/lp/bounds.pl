@@ -6,7 +6,7 @@
 example(E):-
     min_rule_size(E,_).
 
-covers(R,E):-
+{covers(R,E)}:-
     rule(R,M),
     min_rule_size(E,N),
     M >= N.

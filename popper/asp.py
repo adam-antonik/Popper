@@ -163,11 +163,14 @@ class ClingoSolver():
                 bias.append(f':- recursive.')
 
         if bounds.non_rec.sat:
-            # pass
             # set min rule size when recursive
             if settings.WITH_MIN_RULE_SIZE and bounds.non_rec.min_rule_size > 1:
-                for i in range(1, bounds.non_rec.min_rule_size):
+                for i in range(1, bounds.non_rec.min_rule_size-1):
+                    print(f':- not recursive, body_size(_,{i}).')
                     bias.append(f':- not recursive, body_size(_,{i}).')
+                bias.append(f'has_big_enough_rule:- body_size(_,K), K>= {bounds.non_rec.exists_min_rule_size-1}.')
+                bias.append(f':- not has_big_enough_rule.')
+
             if bounds.non_rec.max_rules < bounds.max_rules:
                 bias.append(f':- not pi_or_rec, clause({bounds.non_rec.max_rules}).')
         else:
